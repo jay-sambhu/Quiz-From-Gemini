@@ -65,7 +65,6 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
     val isSyncingKeysWithFirebase by viewModel.isSyncingKeysWithFirebase.collectAsState()
 
     var keyInputText by remember { mutableStateOf("") }
-    var autoSyncToFirebase by remember { mutableStateOf(true) }
 
     // State for individual key visibility & test results
     val revealedKeys = remember { mutableStateMapOf<Int, Boolean>() }
@@ -100,16 +99,16 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                             .background(BentoPrimary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.VpnKey, contentDescription = null, tint = BentoPrimary, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Security, contentDescription = null, tint = BentoPrimary, modifier = Modifier.size(20.dp))
                     }
                     Column {
                         Text(
-                            text = "API Configuration",
+                            text = "API Configuration & Security",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Cloud Firebase Gemini Pool & Dynamic Rate-Limit Failover Engine",
+                            text = "Zero-Leakage Local Credential Sandbox & Dynamic Rate-Limit Failover Engine",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -118,7 +117,7 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
             }
         }
 
-        // --- 1. Firebase Cloud Storage & Key Synchronization Card ---
+        // --- 1. Local Device Sandbox & Zero-Leakage Security Card ---
         item {
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -126,13 +125,11 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                 ),
                 border = CardDefaults.outlinedCardBorder().copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(
-                        if (isApiKeySyncedWithCloud) BentoEmerald.copy(alpha = 0.5f) else BentoPrimary.copy(alpha = 0.3f)
-                    )
+                    brush = androidx.compose.ui.graphics.SolidColor(BentoEmerald.copy(alpha = 0.5f))
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("firebase_cloud_keys_card")
+                    .testTag("secure_keys_sandbox_card")
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -151,35 +148,34 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                                 modifier = Modifier
                                     .size(34.dp)
                                     .clip(CircleShape)
-                                    .background(if (isCloudConnected) BentoEmerald.copy(alpha = 0.15f) else BentoAmber.copy(alpha = 0.15f)),
+                                    .background(BentoEmerald.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (isCloudConnected) Icons.Default.CloudDone else Icons.Default.CloudOff,
+                                    imageVector = Icons.Default.Shield,
                                     contentDescription = null,
-                                    tint = if (isCloudConnected) BentoEmerald else BentoAmber,
+                                    tint = BentoEmerald,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
                             Column {
                                 Text(
-                                    text = "Firebase Firestore Key Storage",
+                                    text = "Local Sandboxed Security",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "system_config / gemini_api_keys",
-                                    fontFamily = FontFamily.Monospace,
+                                    text = "Private Device Storage • Zero Cloud Leakage",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
 
-                        // Cloud Status Badge
+                        // Security Status Badge
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = if (isApiKeySyncedWithCloud) BentoEmerald.copy(alpha = 0.15f) else BentoPrimary.copy(alpha = 0.12f)
+                            color = BentoEmerald.copy(alpha = 0.15f)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -190,13 +186,13 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                                     modifier = Modifier
                                         .size(6.dp)
                                         .clip(CircleShape)
-                                        .background(if (isApiKeySyncedWithCloud) BentoEmerald else BentoPrimary)
+                                        .background(BentoEmerald)
                                 )
                                 Text(
-                                    text = if (isApiKeySyncedWithCloud) "Firebase Synced" else "Local Ready",
+                                    text = "Protected & Local",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isApiKeySyncedWithCloud) BentoEmerald else BentoPrimary
+                                    color = BentoEmerald
                                 )
                             }
                         }
@@ -213,36 +209,13 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "$cloudApiKeyCount",
+                                text = "${configuredKeys.size}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = BentoPrimary
                             )
                             Text(
-                                text = "Keys in Cloud",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        VerticalDivider(modifier = Modifier.height(32.dp))
-
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            val syncTimeFormatted = remember(lastApiKeyCloudSyncTime) {
-                                if (lastApiKeyCloudSyncTime > 0) {
-                                    SimpleDateFormat("hh:mm:ss a", Locale.getDefault()).format(Date(lastApiKeyCloudSyncTime))
-                                } else {
-                                    "Pending"
-                                }
-                            }
-                            Text(
-                                text = syncTimeFormatted,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Last Cloud Sync",
+                                text = "Local Keys Active",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -252,69 +225,74 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = if (isCloudConnected) "Online" else "Offline",
+                                text = "Header Only",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isCloudConnected) BentoEmerald else BentoRose
+                                color = BentoEmerald
                             )
                             Text(
-                                text = "Firestore Link",
+                                text = "Auth Method",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        VerticalDivider(modifier = Modifier.height(32.dp))
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Zero Exposure",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = BentoEmerald
+                            )
+                            Text(
+                                text = "Cloud Storage",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    // Cloud Action Buttons
+                    // Security Actions
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Button(
                             onClick = {
-                                viewModel.saveApiKeysToFirebase { success ->
-                                    val msg = if (success) "Saved keys to Firebase Firestore!" else "Failed saving to Firebase"
-                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                viewModel.purgeCloudApiKeys {
+                                    Toast.makeText(context, "Cloud credentials purged and verified!", Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            enabled = !isSyncingKeysWithFirebase,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("save_keys_to_firebase_btn"),
-                            colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary)
+                                .testTag("purge_cloud_keys_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = BentoRose)
                         ) {
-                            if (isSyncingKeysWithFirebase) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text("Syncing...", fontSize = 12.sp)
-                            } else {
-                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Save to Firebase", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
+                            Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Purge Cloud Keys", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
 
                         OutlinedButton(
                             onClick = {
-                                viewModel.pullApiKeysFromFirebase { success, count ->
-                                    val msg = if (success) "Synced $count key(s) from Firebase" else "No keys found in Firebase"
-                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                val rotated = viewModel.cycleGeminiApiKeyManually()
+                                if (rotated != null) {
+                                    Toast.makeText(context, "Rotated to next key in pool", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "No alternate key to cycle", Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            enabled = !isSyncingKeysWithFirebase,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("sync_from_firebase_btn")
+                                .testTag("cycle_active_key_btn")
                         ) {
-                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Sync from Cloud", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Cycle Active Key", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
                 }
@@ -407,7 +385,7 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                         value = keyInputText,
                         onValueChange = { keyInputText = it },
                         label = { Text("Gemini API Key(s)") },
-                        placeholder = { Text("Paste AIzaSy... (supports comma, space, or newline separated keys)") },
+                        placeholder = { Text("Paste Gemini API key (supports comma, space, or newline separated)") },
                         leadingIcon = { Icon(Icons.Default.VpnKey, contentDescription = null) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -417,7 +395,7 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                         maxLines = 3
                     )
 
-                    // Auto-sync to Firebase checkbox
+                    // Local privacy badge & Add button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -427,14 +405,16 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Checkbox(
-                                checked = autoSyncToFirebase,
-                                onCheckedChange = { autoSyncToFirebase = it }
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = BentoEmerald,
+                                modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "Auto-save to Firebase Cloud",
+                                text = "Secured locally on device",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
@@ -442,11 +422,10 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                             onClick = {
                                 if (keyInputText.isNotBlank()) {
                                     val count = viewModel.addAdminGeminiApiKeys(
-                                        rawInput = keyInputText,
-                                        syncToFirebase = autoSyncToFirebase
+                                        rawInput = keyInputText
                                     )
                                     keyInputText = ""
-                                    Toast.makeText(context, "Added $count key(s) to pool", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Added $count key(s) to local pool", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             enabled = keyInputText.isNotBlank(),
@@ -462,7 +441,7 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
             }
         }
 
-        // --- 4. Configured API Keys Pool (Firebase Managed) ---
+        // --- 4. Configured API Keys Pool (Secure Local Sandbox) ---
         item {
             Card(
                 shape = RoundedCornerShape(16.dp),

@@ -123,7 +123,7 @@ class GeminiQuizQuestionService(
             val models = apiKeyManager.getAvailableModels()
 
             for (model in models) {
-                val apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
+                val apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
                 Log.d(TAG, "Attempting question generation with model '$model' and key '$maskedKey'")
 
                 try {
@@ -141,6 +141,7 @@ class GeminiQuizQuestionService(
 
                     val request = Request.Builder()
                         .url(apiUrl)
+                        .addHeader("x-goog-api-key", apiKey)
                         .post(requestPayload.toString().toRequestBody("application/json".toMediaType()))
                         .build()
 

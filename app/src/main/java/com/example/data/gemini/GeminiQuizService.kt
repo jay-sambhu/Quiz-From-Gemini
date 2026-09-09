@@ -135,7 +135,8 @@ class GeminiQuizService(
                 }
 
                 val request = Request.Builder()
-                    .url("$API_URL?key=$currentKey")
+                    .url(API_URL)
+                    .addHeader("x-goog-api-key", currentKey)
                     .post(requestBodyJson.toString().toRequestBody("application/json".toMediaType()))
                     .build()
 
@@ -453,7 +454,8 @@ class GeminiQuizService(
                 }
 
                 val request = Request.Builder()
-                    .url("$API_URL?key=$currentKey")
+                    .url(API_URL)
+                    .addHeader("x-goog-api-key", currentKey)
                     .post(requestBodyJson.toString().toRequestBody("application/json".toMediaType()))
                     .build()
 
@@ -551,7 +553,8 @@ class GeminiQuizService(
                 }
 
                 val request = Request.Builder()
-                    .url("$API_URL?key=$currentKey")
+                    .url(API_URL)
+                    .addHeader("x-goog-api-key", currentKey)
                     .post(requestBodyJson.toString().toRequestBody("application/json".toMediaType()))
                     .build()
 

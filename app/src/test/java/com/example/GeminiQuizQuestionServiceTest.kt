@@ -31,7 +31,7 @@ class GeminiQuizQuestionServiceTest {
 
     @Test
     fun testApiKeyManagerAddAndMaskKeys() {
-        val input = "AIzaSyFakeKeyOne123456789, AIzaSyFakeKeyTwo987654321\nAIzaSyFakeKeyThree456789"
+        val input = "test_gemini_key_alpha_1234, test_gemini_key_beta_5678\ntest_gemini_key_gamma_9012"
         val count = apiKeyManager.addApiKeys(input)
         assertEquals(3, count)
 
@@ -39,8 +39,8 @@ class GeminiQuizQuestionServiceTest {
         assertEquals(3, keys.size)
 
         val masked = apiKeyManager.maskKey(keys[0])
-        assertTrue(masked.startsWith("AIzaSy"))
-        assertTrue(masked.contains("..."))
+        assertTrue(masked.startsWith("••••••••"))
+        assertTrue(masked.endsWith("1234"))
 
         // Test removal
         apiKeyManager.removeApiKey(1)

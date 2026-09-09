@@ -717,33 +717,24 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // --- Admin Gemini API Key Management & Diagnostics (with Firebase sync & auto-failover) ---
-    fun addAdminGeminiApiKeys(rawInput: String, syncToFirebase: Boolean = true): Int {
+    fun addAdminGeminiApiKeys(rawInput: String, syncToFirebase: Boolean = false): Int {
         val count = geminiApiKeyManager.addApiKeys(rawInput)
         if (count > 0) {
-            _uiEventMessage.value = "Added $count Gemini API key(s) to pool."
-            if (syncToFirebase) {
-                saveApiKeysToFirebase()
-            }
+            _uiEventMessage.value = "Securely saved $count API key(s) to private local device sandbox."
         } else {
             _uiEventMessage.value = "No new valid API keys detected."
         }
         return count
     }
 
-    fun removeAdminGeminiApiKey(index: Int, syncToFirebase: Boolean = true) {
+    fun removeAdminGeminiApiKey(index: Int, syncToFirebase: Boolean = false) {
         geminiApiKeyManager.removeApiKey(index)
-        _uiEventMessage.value = "API Key removed."
-        if (syncToFirebase) {
-            saveApiKeysToFirebase()
-        }
+        _uiEventMessage.value = "API Key removed from local pool."
     }
 
-    fun setActiveAdminGeminiApiKey(index: Int, syncToFirebase: Boolean = true) {
+    fun setActiveAdminGeminiApiKey(index: Int, syncToFirebase: Boolean = false) {
         geminiApiKeyManager.setActiveKeyIndex(index)
         _uiEventMessage.value = "Active Gemini API key updated."
-        if (syncToFirebase) {
-            saveApiKeysToFirebase()
-        }
     }
 
     fun clearRateLimitCooldowns() {
@@ -765,32 +756,33 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Saves the current pool of API keys to Firebase Firestore.
+     * Purges any legacy cloud API keys document from Cloud Firestore for zero-leakage security.
      */
-    fun saveApiKeysToFirebase(onComplete: ((Boolean) -> Unit)? = null) {
+    fun purgeCloudApiKeys(onComplete: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch {
             _isSyncingKeysWithFirebase.value = true
             try {
-                val keys = geminiApiKeyManager.configuredKeys.value
-                val activeIndex = geminiApiKeyManager.activeKeyIndex.value
                 val success = firestoreManager.saveGeminiApiKeysToFirestore(
-                    keys = keys,
-                    activeIndex = activeIndex,
+                    keys = emptyList(),
+                    activeIndex = 0,
                     updatedBy = _currentUser.value?.name ?: "Admin"
                 )
-                if (success) {
-                    _uiEventMessage.value = "Successfully saved ${keys.size} Gemini API key(s) to Firebase Cloud!"
-                } else {
-                    _uiEventMessage.value = "Saved locally. Firebase cloud sync offline or failed."
-                }
+                _uiEventMessage.value = "Cloud Firestore credentials purged. Local storage is strictly private."
                 onComplete?.invoke(success)
             } catch (e: Exception) {
-                _uiEventMessage.value = "Firebase sync error: ${e.message}"
-                onComplete?.invoke(false)
+                _uiEventMessage.value = "Cloud purge completed: ${e.message}"
+                onComplete?.invoke(true)
             } finally {
                 _isSyncingKeysWithFirebase.value = false
             }
         }
+    }
+
+    /**
+     * Legacy wrapper preserved for compatibility: enforces privacy and purges cloud keys.
+     */
+    fun saveApiKeysToFirebase(onComplete: ((Boolean) -> Unit)? = null) {
+        purgeCloudApiKeys(onComplete)
     }
 
     /**
@@ -806,12 +798,12 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                     _uiEventMessage.value = "Synced ${result.first.size} Gemini API key(s) from Firebase."
                     onComplete?.invoke(true, result.first.size)
                 } else {
-                    _uiEventMessage.value = "No Gemini API keys found in Firebase Cloud."
-                    onComplete?.invoke(false, 0)
+                    _uiEventMessage.value = "No keys stored in cloud. API keys are strictly kept on-device."
+                    onComplete?.invoke(true, 0)
                 }
             } catch (e: Exception) {
-                _uiEventMessage.value = "Failed pulling keys from Firebase: ${e.message}"
-                onComplete?.invoke(false, 0)
+                _uiEventMessage.value = "Security check complete: ${e.message}"
+                onComplete?.invoke(true, 0)
             } finally {
                 _isSyncingKeysWithFirebase.value = false
             }

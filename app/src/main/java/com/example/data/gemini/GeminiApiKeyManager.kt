@@ -132,7 +132,7 @@ class GeminiApiKeyManager(private val context: Context? = null) {
     fun addApiKeys(rawInput: String): Int {
         val candidates = rawInput.split(',', '\n', ' ', ';')
             .map { it.trim() }
-            .filter { it.length > 10 } // typical Gemini keys are ~39 chars starting with AIza
+            .filter { it.length > 10 }
 
         val currentList = _configuredKeys.value.toMutableList()
         var addedCount = 0
@@ -369,10 +369,10 @@ class GeminiApiKeyManager(private val context: Context? = null) {
     }
 
     /**
-     * Helper to mask an API key for safe display in UI (e.g. AIzaSyB...82Zq)
+     * Helper to mask an API key for safe display in UI (e.g. ••••••••82Zq)
      */
     fun maskKey(key: String): String {
-        if (key.length <= 8) return "••••••••"
-        return key.take(7) + "..." + key.takeLast(4)
+        if (key.length <= 6) return "••••••••"
+        return "••••••••" + key.takeLast(4)
     }
 }

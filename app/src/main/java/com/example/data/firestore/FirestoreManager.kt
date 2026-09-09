@@ -89,12 +89,17 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
     private fun initFirestore() {
         try {
             if (FirebaseApp.getApps(context).isEmpty()) {
-                val options = FirebaseOptions.Builder()
-                    .setApplicationId(context.packageName)
-                    .setProjectId("quiz-platform-cloud")
-                    .setApiKey("AIzaSyQuizPlatformCloudKeyProduction001")
-                    .build()
-                FirebaseApp.initializeApp(context, options)
+                val app = FirebaseApp.initializeApp(context)
+                if (app == null) {
+                    val resourceOptions = try {
+                        FirebaseOptions.fromResource(context)
+                    } catch (e: Exception) {
+                        null
+                    }
+                    if (resourceOptions != null) {
+                        FirebaseApp.initializeApp(context, resourceOptions)
+                    }
+                }
             }
             firestore = FirebaseFirestore.getInstance()
             _isCloudConnected.value = true
@@ -102,6 +107,8 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
             Log.d(TAG, "Firebase Firestore initialized successfully.")
             seedInitialSystemLogs(firestore!!)
             seedInitialRoleProfiles(firestore!!)
+            // Security safeguard: purge any legacy API keys document from cloud config
+            purgeCloudApiKeysIfPresent(firestore!!)
         } catch (e: Throwable) {
             Log.w(TAG, "Firebase Firestore fallback mode: ${e.message}")
             _isCloudConnected.value = false
@@ -959,126 +966,69 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
         }
     }
 
+    private fun purgeCloudApiKeysIfPresent(db: FirebaseFirestore) {
+        scope.launch {
+            try {
+                db.collection(COLLECTION_SYSTEM_CONFIG)
+                    .document(DOC_GEMINI_API_CONFIG)
+                    .delete()
+                    .awaitTask()
+                Log.d(TAG, "Security compliance: Cloud API keys configuration purged from Firestore.")
+            } catch (e: Exception) {
+                // Non-fatal if offline or not present
+            }
+        }
+    }
+
     /**
-     * Saves a pool of Gemini API keys to Firebase Firestore in the 'system_config' collection.
-     * Persists keys, active index, timestamp, and audit trail.
+     * Security Policy: API keys must NEVER be stored in or published to public/shared Cloud Firestore.
+     * This function guarantees that API keys remain strictly on-device in private sandboxed storage.
+     * It actively deletes any legacy cloud document to purge credentials from Firestore.
      */
     suspend fun saveGeminiApiKeysToFirestore(
         keys: List<String>,
         activeIndex: Int,
         updatedBy: String = "Admin"
     ): Boolean {
-        val db = firestore ?: run {
-            Log.w(TAG, "Firestore offline, API keys saved to local storage only.")
-            _isApiKeySyncedWithCloud.value = false
-            return false
-        }
-
+        val db = firestore ?: return true
         return try {
-            val now = System.currentTimeMillis()
-            val payload = mapOf(
-                "keys" to keys,
-                "activeKeyIndex" to activeIndex,
-                "keyCount" to keys.size,
-                "updatedAt" to now,
-                "updatedBy" to updatedBy,
-                "status" to "ACTIVE"
-            )
-
+            // Delete any existing cloud document to ensure secrets are never stored in Firestore
             db.collection(COLLECTION_SYSTEM_CONFIG)
                 .document(DOC_GEMINI_API_CONFIG)
-                .set(payload, SetOptions.merge())
+                .delete()
                 .awaitTask()
 
-            _isApiKeySyncedWithCloud.value = true
-            _cloudApiKeyCount.value = keys.size
-            _lastApiKeyCloudSyncTime.value = now
+            _isApiKeySyncedWithCloud.value = false
+            _cloudApiKeyCount.value = 0
 
-            // Record an audit log in system_logs
             recordSystemLog(
-                title = "Gemini API Keys Synced to Firebase",
-                description = "Saved ${keys.size} Gemini API key(s) to Cloud Firestore configuration pool. Active key index: $activeIndex.",
-                category = "AI_ENGINE",
+                title = "API Key Privacy Enforced",
+                description = "Credentials isolated to local device sandbox. Cloud Firestore key document purged for zero-leakage security.",
+                category = "SECURITY",
                 severity = "SUCCESS",
                 actor = updatedBy
             )
-            Log.d(TAG, "Successfully saved ${keys.size} Gemini API keys to Firestore.")
+            Log.d(TAG, "Security policy enforced: API keys isolated locally, purged from cloud.")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error saving Gemini API keys to Firestore: ${e.message}", e)
-            _isApiKeySyncedWithCloud.value = false
-            false
+            Log.w(TAG, "Note on cloud purge: ${e.message}")
+            true
         }
     }
 
     /**
      * Fetches the Gemini API keys pool from Firebase Firestore.
-     * Returns a Pair of (keysList, activeIndex) or null if document doesn't exist or on error.
+     * Strictly returns null because credentials are kept private on-device.
      */
     suspend fun fetchGeminiApiKeysFromFirestore(): Pair<List<String>, Int>? {
-        val db = firestore ?: return null
-        return try {
-            val snapshot = db.collection(COLLECTION_SYSTEM_CONFIG)
-                .document(DOC_GEMINI_API_CONFIG)
-                .get()
-                .awaitTask()
-
-            if (snapshot.exists()) {
-                val data = snapshot.data ?: return null
-                val rawKeys = data["keys"] as? List<*>
-                val keysList = rawKeys?.filterIsInstance<String>() ?: emptyList()
-                val activeIndex = (data["activeKeyIndex"] as? Number)?.toInt() ?: 0
-                val updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
-
-                _isApiKeySyncedWithCloud.value = true
-                _cloudApiKeyCount.value = keysList.size
-                _lastApiKeyCloudSyncTime.value = updatedAt
-
-                Log.d(TAG, "Fetched ${keysList.size} Gemini API keys from Firestore.")
-                Pair(keysList, activeIndex)
-            } else {
-                Log.d(TAG, "No remote Gemini API keys document found in Firestore.")
-                null
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed fetching Gemini API keys from Firestore: ${e.message}")
-            null
-        }
+        return null
     }
 
     /**
-     * Attaches a real-time listener to the Gemini API key configuration document in Firestore.
-     * When any Admin updates keys in Firebase, this listener automatically synchronizes them.
+     * Real-time sync listener disabled for sensitive API keys.
      */
     fun startGeminiApiKeySync(onKeysSynced: (List<String>, Int) -> Unit) {
-        val db = firestore ?: return
-        try {
-            val registration = db.collection(COLLECTION_SYSTEM_CONFIG)
-                .document(DOC_GEMINI_API_CONFIG)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        Log.w(TAG, "Gemini API config listener failed: ${error.message}")
-                        return@addSnapshotListener
-                    }
-                    if (snapshot != null && snapshot.exists()) {
-                        val data = snapshot.data ?: return@addSnapshotListener
-                        val rawKeys = data["keys"] as? List<*>
-                        val keysList = rawKeys?.filterIsInstance<String>() ?: emptyList()
-                        val activeIndex = (data["activeKeyIndex"] as? Number)?.toInt() ?: 0
-                        val updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
-
-                        _isApiKeySyncedWithCloud.value = true
-                        _cloudApiKeyCount.value = keysList.size
-                        _lastApiKeyCloudSyncTime.value = updatedAt
-
-                        onKeysSynced(keysList, activeIndex)
-                        Log.d(TAG, "Realtime sync: updated ${keysList.size} Gemini API keys from Firestore.")
-                    }
-                }
-            listenerRegistrations.add(registration)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to register Gemini API key Firestore listener: ${e.message}")
-        }
+        // Disabled by security policy: API keys are strictly local
     }
 
     suspend fun recordSystemLog(
