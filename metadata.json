@@ -1,0 +1,6 @@
+{
+  "name": "Quiz Platform",
+  "description": "Multi-role quiz platform for Admins, Teachers, and Students with analytics, leaderboards, AI question generation, and past history.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
