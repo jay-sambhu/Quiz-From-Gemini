@@ -14,7 +14,16 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Environment variables & API key secret exclusions (Zero-leakage policy)
 .env
+.env.*
+!.env.example
+.env.local
+.env.development
+.env.production
+.env.staging
+
 debug.keystore
 .build-outputs/
 *.apk

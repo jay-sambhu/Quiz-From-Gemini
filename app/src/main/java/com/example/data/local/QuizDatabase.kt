@@ -60,55 +60,7 @@ abstract class QuizDatabase : RoomDatabase() {
         }
 
         private suspend fun populateInitialData(dao: QuizDao) {
-            // Initial Users
-            val adminUser = UserEntity(
-                id = "google_admin_001",
-                name = "Dr. Eleanor Vance",
-                email = "admin@quizplatform.edu",
-                photoUrl = "https://lh3.googleusercontent.com/a/default-user",
-                role = UserRole.ADMIN,
-                preferredSubject = "All"
-            )
-            val teacherUser = UserEntity(
-                id = "google_teacher_001",
-                name = "Prof. Alan Turing",
-                email = "alan.turing@quizplatform.edu",
-                photoUrl = "https://lh3.googleusercontent.com/a/default-user",
-                role = UserRole.TEACHER,
-                preferredSubject = "Computer Science"
-            )
-            val studentUser1 = UserEntity(
-                id = "google_student_001",
-                name = "Aashish Gentleman",
-                email = "gentlemanaashish222@gmail.com",
-                photoUrl = "https://lh3.googleusercontent.com/a/default-user",
-                role = UserRole.STUDENT,
-                preferredSubject = "Computer Science"
-            )
-            val studentUser2 = UserEntity(
-                id = "google_student_002",
-                name = "Sophia Chen",
-                email = "sophia.chen@student.edu",
-                photoUrl = "https://lh3.googleusercontent.com/a/default-user",
-                role = UserRole.STUDENT,
-                preferredSubject = "Mathematics"
-            )
-            val studentUser3 = UserEntity(
-                id = "google_student_003",
-                name = "Marcus Johnson",
-                email = "marcus.j@student.edu",
-                photoUrl = "https://lh3.googleusercontent.com/a/default-user",
-                role = UserRole.STUDENT,
-                preferredSubject = "Science"
-            )
-
-            dao.insertUser(adminUser)
-            dao.insertUser(teacherUser)
-            dao.insertUser(studentUser1)
-            dao.insertUser(studentUser2)
-            dao.insertUser(studentUser3)
-
-            // Initial Categories
+            // Initial Academic Categories
             val cat1 = CategoryEntity("cat_cs", "Computer Science", "Algorithms, Data Structures & AI", "Computer", "#3F51B5")
             val cat2 = CategoryEntity("cat_math", "Mathematics", "Calculus, Linear Algebra & Probability", "Functions", "#00897B")
             val cat3 = CategoryEntity("cat_sci", "Physics & Chemistry", "Quantum Mechanics & Thermodynamics", "Science", "#E64A19")
@@ -119,15 +71,15 @@ abstract class QuizDatabase : RoomDatabase() {
             dao.insertCategory(cat3)
             dao.insertCategory(cat4)
 
-            // Initial Quiz Set 1 - CS
+            // Initial Curriculum Quiz Set 1 - CS
             val quiz1 = QuizSetEntity(
                 id = "quiz_cs_01",
                 title = "Algorithms & Data Structures Mastery",
                 description = "Test your knowledge of Time Complexity, Binary Trees, and Sorting Algorithms.",
                 categoryId = cat1.id,
                 categoryName = cat1.name,
-                creatorTeacherId = teacherUser.id,
-                creatorTeacherName = teacherUser.name,
+                creatorTeacherId = "faculty_lead",
+                creatorTeacherName = "Academic Faculty",
                 durationMinutes = 5,
                 passPercentage = 70,
                 difficulty = "Medium",
@@ -351,111 +303,6 @@ abstract class QuizDatabase : RoomDatabase() {
                 explanation = "According to the empirical rule (68-95-99.7), approximately 68.2% of data falls within 1 standard deviation."
             )
             dao.insertQuestions(listOf(q5_1, q5_2))
-
-            // Initial Student Attempt records for Leaderboard & History
-            val attempt1 = QuizAttemptEntity(
-                id = "att_001",
-                quizSetId = quiz1.id,
-                quizTitle = quiz1.title,
-                categoryName = quiz1.categoryName,
-                studentId = studentUser1.id,
-                studentName = studentUser1.name,
-                studentEmail = studentUser1.email,
-                score = 3,
-                totalQuestions = 3,
-                percentage = 100f,
-                timeSpentSeconds = 85,
-                completedAt = System.currentTimeMillis() - (1000 * 3600 * 2),
-                userAnswersJson = "{\"q1_1\":2, \"q1_2\":1, \"q1_3\":2}"
-            )
-            val attempt2 = QuizAttemptEntity(
-                id = "att_002",
-                quizSetId = quiz1.id,
-                quizTitle = quiz1.title,
-                categoryName = quiz1.categoryName,
-                studentId = studentUser2.id,
-                studentName = studentUser2.name,
-                studentEmail = studentUser2.email,
-                score = 2,
-                totalQuestions = 3,
-                percentage = 66.6f,
-                timeSpentSeconds = 120,
-                completedAt = System.currentTimeMillis() - (1000 * 3600 * 5)
-            )
-            val attempt3 = QuizAttemptEntity(
-                id = "att_003",
-                quizSetId = quiz2.id,
-                quizTitle = quiz2.title,
-                categoryName = quiz2.categoryName,
-                studentId = studentUser3.id,
-                studentName = studentUser3.name,
-                studentEmail = studentUser3.email,
-                score = 2,
-                totalQuestions = 2,
-                percentage = 100f,
-                timeSpentSeconds = 90,
-                completedAt = System.currentTimeMillis() - (1000 * 3600 * 12)
-            )
-            val attempt4 = QuizAttemptEntity(
-                id = "att_004",
-                quizSetId = quiz2.id,
-                quizTitle = quiz2.title,
-                categoryName = quiz2.categoryName,
-                studentId = studentUser2.id,
-                studentName = studentUser2.name,
-                studentEmail = studentUser2.email,
-                score = 2,
-                totalQuestions = 2,
-                percentage = 100f,
-                timeSpentSeconds = 105,
-                completedAt = System.currentTimeMillis() - (1000 * 3600 * 8)
-            )
-            val attempt5 = QuizAttemptEntity(
-                id = "att_005",
-                quizSetId = quiz3.id,
-                quizTitle = quiz3.title,
-                categoryName = quiz3.categoryName,
-                studentId = studentUser1.id,
-                studentName = studentUser1.name,
-                studentEmail = studentUser1.email,
-                score = 3,
-                totalQuestions = 3,
-                percentage = 100f,
-                timeSpentSeconds = 140,
-                completedAt = System.currentTimeMillis() - (1000 * 3600 * 4)
-            )
-            val attempt6 = QuizAttemptEntity(
-                id = "att_006",
-                quizSetId = quiz1.id,
-                quizTitle = quiz1.title,
-                categoryName = quiz1.categoryName,
-                studentId = studentUser3.id,
-                studentName = studentUser3.name,
-                studentEmail = studentUser3.email,
-                score = 2,
-                totalQuestions = 3,
-                percentage = 66.7f,
-                timeSpentSeconds = 110,
-                completedAt = System.currentTimeMillis() - (1000 * 3600 * 20)
-            )
-            dao.insertAttempt(attempt1)
-            dao.insertAttempt(attempt2)
-            dao.insertAttempt(attempt3)
-            dao.insertAttempt(attempt4)
-            dao.insertAttempt(attempt5)
-            dao.insertAttempt(attempt6)
-
-            // Initial Notification Log
-            dao.insertNotificationLog(
-                NotificationLogEntity(
-                    id = "notif_001",
-                    recipientEmail = studentUser1.email,
-                    recipientName = studentUser1.name,
-                    subject = "New Quiz Assignment: " + quiz1.title,
-                    body = "Hello " + studentUser1.name + ",\n\nProf. Alan Turing has assigned a new quiz: '" + quiz1.title + "'. Please log in to complete your test.",
-                    quizSetId = quiz1.id
-                )
-            )
         }
     }
 }

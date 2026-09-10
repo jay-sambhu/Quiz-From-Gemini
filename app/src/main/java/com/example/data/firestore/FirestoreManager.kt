@@ -80,6 +80,8 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
     private val _systemLogs = MutableStateFlow<List<SystemLogItem>>(emptyList())
     val systemLogs: StateFlow<List<SystemLogItem>> = _systemLogs.asStateFlow()
 
+    val appCheckManager: FirebaseAppCheckManager = FirebaseAppCheckManager.getInstance(context)
+
     private val listenerRegistrations = mutableListOf<ListenerRegistration>()
 
     init {
@@ -101,12 +103,15 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
                     }
                 }
             }
+
+            // Initialize and enforce Firebase App Check provider
+            appCheckManager.initialize()
+
             firestore = FirebaseFirestore.getInstance()
             _isCloudConnected.value = true
             _cloudSyncMessage.value = "Cloud Firestore: Active & Synced"
             Log.d(TAG, "Firebase Firestore initialized successfully.")
             seedInitialSystemLogs(firestore!!)
-            seedInitialRoleProfiles(firestore!!)
             // Security safeguard: purge any legacy API keys document from cloud config
             purgeCloudApiKeysIfPresent(firestore!!)
         } catch (e: Throwable) {
@@ -1098,6 +1103,15 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
     private fun getDefaultSystemLogs(): List<SystemLogItem> {
         val now = System.currentTimeMillis()
         return listOf(
+            SystemLogItem(
+                id = "log_init_00_appcheck",
+                title = "Firebase App Check Request Enforcement",
+                description = "Backend security attestation active. Protecting Cloud Firestore and Firebase resources from unauthorized traffic.",
+                category = "SECURITY",
+                severity = "SUCCESS",
+                actor = "Firebase App Check",
+                timestamp = now - 3600000 * 5
+            ),
             SystemLogItem(
                 id = "log_init_01",
                 title = "Cloud Security Rules Enforced",

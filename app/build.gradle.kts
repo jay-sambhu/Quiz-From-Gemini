@@ -1,4 +1,6 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Properties
+import java.io.FileInputStream
 
 plugins {
   alias(libs.plugins.android.application)
@@ -59,11 +61,115 @@ android {
   testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
+// Configure the Secrets Gradle Plugin to load from local.properties if present, or fallback to .env
 secrets {
-  propertiesFileName = ".env"
-  defaultPropertiesFileName = ".env.example"
+  propertiesFileName = if (rootProject.file("local.properties").exists()) "local.properties" else ".env"
+  defaultPropertiesFileName = if (rootProject.file("local.defaults.properties").exists()) "local.defaults.properties" else ".env.example"
+}
+
+/**
+ * Build-time check task: Verifies that GEMINI_API_KEY is properly loaded from local.properties
+ * and fails the build if the key is missing or is the default placeholder.
+ * Uses typed properties for full Gradle Configuration Cache compatibility.
+ */
+abstract class VerifyGeminiApiKeyTask : DefaultTask() {
+  @get:Internal
+  abstract val localPropertiesFile: RegularFileProperty
+
+  @get:Internal
+  abstract val aiStudioAgent: Property<Boolean>
+
+  @get:Internal
+  abstract val explicitTask: Property<Boolean>
+
+  @TaskAction
+  fun verify() {
+    val localPropsFile = localPropertiesFile.orNull?.asFile
+    val isAiStudio = aiStudioAgent.getOrElse(false)
+    val isExplicit = explicitTask.getOrElse(false)
+
+    if (localPropsFile == null || !localPropsFile.exists()) {
+      if (isExplicit || !isAiStudio) {
+        throw GradleException(
+          "BUILD FAILED: 'local.properties' file not found at ${localPropsFile?.absolutePath ?: "project root"}.\n" +
+          "Please create 'local.properties' and configure GEMINI_API_KEY=<your_api_key>."
+        )
+      } else {
+        logger.lifecycle("AI Studio container environment: 'local.properties' not found; using Secrets panel / environment credentials.")
+        return
+      }
+    }
+
+    val properties = Properties().apply {
+      localPropsFile.inputStream().use { load(it) }
+    }
+
+    val apiKey = properties.getProperty("GEMINI_API_KEY")?.trim()
+
+    val defaultPlaceholders = setOf(
+      "",
+      "MY_GEMINI_API_KEY",
+      "YOUR_API_KEY",
+      "YOUR_API_KEY_HERE",
+      "YOUR_GEMINI_API_KEY",
+      "PLACEHOLDER",
+      "TODO",
+      "CHANGE_ME",
+      "your_api_key",
+      "your_gemini_api_key",
+      "DEFAULT"
+    )
+
+    if (apiKey.isNullOrEmpty()) {
+      throw GradleException(
+        "BUILD FAILED: 'GEMINI_API_KEY' is missing or empty in 'local.properties'.\n" +
+        "Please provide a valid GEMINI_API_KEY in local.properties."
+      )
+    }
+
+    if (defaultPlaceholders.contains(apiKey) ||
+        apiKey.contains("YOUR_API_KEY", ignoreCase = true) ||
+        apiKey.contains("MY_GEMINI_API_KEY", ignoreCase = true) ||
+        apiKey.equals("PLACEHOLDER", ignoreCase = true)
+    ) {
+      throw GradleException(
+        "BUILD FAILED: GEMINI_API_KEY in 'local.properties' is set to default placeholder ('$apiKey').\n" +
+        "Please replace it with a valid, functional Gemini API key."
+      )
+    }
+
+    logger.lifecycle("BUILD SUCCESS: GEMINI_API_KEY successfully loaded and verified from local.properties.")
+  }
+}
+
+val verifyGeminiApiKey = tasks.register<VerifyGeminiApiKeyTask>("verifyGeminiApiKey") {
+  group = "verification"
+  description = "Verifies that GEMINI_API_KEY is properly loaded from local.properties and fails the build if missing or default placeholder."
+  localPropertiesFile.set(rootProject.file("local.properties"))
+  aiStudioAgent.set(System.getenv("AI_STUDIO_AGENT") == "1")
+  explicitTask.set(
+    gradle.startParameter.taskNames.any { name ->
+      name.contains("verifyGeminiApiKey", ignoreCase = true) ||
+      name.contains("checkGeminiApiKey", ignoreCase = true) ||
+      name.contains("validateGeminiApiKey", ignoreCase = true)
+    }
+  )
+}
+
+tasks.register("checkGeminiApiKey") {
+  group = "verification"
+  description = "Alias for verifyGeminiApiKey"
+  dependsOn(verifyGeminiApiKey)
+}
+
+tasks.register("validateGeminiApiKey") {
+  group = "verification"
+  description = "Alias for verifyGeminiApiKey"
+  dependsOn(verifyGeminiApiKey)
+}
+
+tasks.named("preBuild") {
+  dependsOn(verifyGeminiApiKey)
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
@@ -105,6 +211,9 @@ dependencies {
   implementation(libs.androidx.credentials)
   implementation(libs.androidx.credentials.play.services)
   implementation(libs.googleid)
+  implementation(libs.firebase.appcheck)
+  implementation(libs.firebase.appcheck.playintegrity)
+  implementation(libs.firebase.appcheck.debug)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)

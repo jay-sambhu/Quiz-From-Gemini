@@ -15,6 +15,18 @@ import org.json.JSONArray
 import java.util.concurrent.TimeUnit
 
 /**
+ * Information regarding the zero-leakage environment variable management strategy
+ * for the Gemini API key.
+ */
+data class EnvironmentSecretStrategyInfo(
+    val isKeyConfiguredInEnv: Boolean,
+    val envMaskedKey: String,
+    val envSource: String = ".env via Secrets Gradle Plugin (BuildConfig.GEMINI_API_KEY)",
+    val isGitIgnored: Boolean = true,
+    val securityNotice: String = "Protected against git commits and leaks: .env is excluded via .gitignore. API keys are injected at build/runtime."
+)
+
+/**
  * Manages multiple Gemini API keys and model rotation fallback sequences.
  * Handles rate limit detection (HTTP 429 / RESOURCE_EXHAUSTED) by cooling down
  * exhausted models/keys, seamlessly cycling to alternate keys, and syncing with Firebase.
@@ -65,6 +77,22 @@ class GeminiApiKeyManager(private val context: Context? = null) {
 
     private val _rateLimitEventMessage = MutableStateFlow<String?>(null)
     val rateLimitEventMessage: StateFlow<String?> = _rateLimitEventMessage.asStateFlow()
+
+    private val _envSecretStatus = MutableStateFlow(computeEnvSecretStatus())
+    val envSecretStatus: StateFlow<EnvironmentSecretStrategyInfo> = _envSecretStatus.asStateFlow()
+
+    private fun computeEnvSecretStatus(): EnvironmentSecretStrategyInfo {
+        val buildConfigKey = try { BuildConfig.GEMINI_API_KEY } catch (_: Exception) { "" }
+        val isConfigured = !buildConfigKey.isNullOrBlank() && buildConfigKey != "MY_GEMINI_API_KEY"
+        return EnvironmentSecretStrategyInfo(
+            isKeyConfiguredInEnv = isConfigured,
+            envMaskedKey = if (isConfigured) maskKey(buildConfigKey) else "Not set in .env"
+        )
+    }
+
+    fun refreshEnvSecretStatus() {
+        _envSecretStatus.value = computeEnvSecretStatus()
+    }
 
     init {
         loadKeysFromStorage()

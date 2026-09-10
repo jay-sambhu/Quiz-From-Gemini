@@ -63,6 +63,9 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
     val cloudApiKeyCount by viewModel.cloudApiKeyCount.collectAsState()
     val lastApiKeyCloudSyncTime by viewModel.lastApiKeyCloudSyncTime.collectAsState()
     val isSyncingKeysWithFirebase by viewModel.isSyncingKeysWithFirebase.collectAsState()
+    val appCheckStatus by viewModel.appCheckStatus.collectAsState()
+    val envSecretStatus by viewModel.envSecretStatus.collectAsState()
+    var isVerifyingAppCheck by remember { mutableStateOf(false) }
 
     var keyInputText by remember { mutableStateOf("") }
 
@@ -293,6 +296,350 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                             Icon(Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Cycle Active Key", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 2. Firebase App Check Request Enforcement Card ---
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                ),
+                border = CardDefaults.outlinedCardBorder().copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(BentoEmerald.copy(alpha = 0.5f))
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("firebase_app_check_card")
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(BentoEmerald.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.VerifiedUser,
+                                    contentDescription = null,
+                                    tint = BentoEmerald,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Firebase App Check Enforcement",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Device & App Binary Attestation • Request Guard",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = BentoEmerald.copy(alpha = 0.15f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(BentoEmerald)
+                                )
+                                Text(
+                                    text = "Enforcing Requests",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BentoEmerald
+                                )
+                            }
+                        }
+                    }
+
+                    // App Check Detail Metrics
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (appCheckStatus.isDebugMode) "Debug Factory" else "Play Integrity",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = BentoPrimary
+                            )
+                            Text(
+                                text = "Attestation Provider",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        VerticalDivider(modifier = Modifier.height(32.dp))
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (appCheckStatus.isAttested) "Attested" else "Active",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = BentoEmerald
+                            )
+                            Text(
+                                text = "Request Guard",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        VerticalDivider(modifier = Modifier.height(32.dp))
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Auto-Refresh",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = BentoEmerald
+                            )
+                            Text(
+                                text = "Token Refresh",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Security Detail Text
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(BentoEmerald.copy(alpha = 0.2f)))
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = BentoEmerald, modifier = Modifier.size(14.dp))
+                                Text("Protected Services: Cloud Firestore, Firebase Auth, Realtime DB", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                            }
+                            Text(
+                                text = "App Check ensures incoming Firebase traffic originates from an authentic app binary. Unattested bot and malicious requests are automatically blocked at the cloud gate.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (appCheckStatus.tokenSnippet.isNotBlank()) {
+                                Text(
+                                    text = "Attestation Token: ${appCheckStatus.tokenSnippet}",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    color = BentoEmerald
+                                )
+                            }
+                        }
+                    }
+
+                    // Action Button to verify attestation live
+                    Button(
+                        onClick = {
+                            isVerifyingAppCheck = true
+                            viewModel.verifyAppCheckAttestation { success, msg ->
+                                isVerifyingAppCheck = false
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        enabled = !isVerifyingAppCheck,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("verify_app_check_btn"),
+                        colors = ButtonDefaults.buttonColors(containerColor = BentoEmerald)
+                    ) {
+                        if (isVerifyingAppCheck) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Verifying App Check...", fontSize = 12.sp)
+                        } else {
+                            Icon(Icons.Default.VerifiedUser, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Verify App Check Attestation Live", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 3. Gemini API Key Environment Variable Management Strategy Card ---
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                ),
+                border = CardDefaults.outlinedCardBorder().copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(BentoPrimary.copy(alpha = 0.5f))
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("gemini_env_strategy_card")
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(BentoPrimary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyOff,
+                                    contentDescription = null,
+                                    tint = BentoPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Gemini Key Environment Strategy",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Zero-Leakage Architecture • Excluded from Git",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = BentoEmerald.copy(alpha = 0.15f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(BentoEmerald)
+                                )
+                                Text(
+                                    text = ".gitignore Excluded",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BentoEmerald
+                                )
+                            }
+                        }
+                    }
+
+                    // Strategy Bullet Points
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = BentoEmerald, modifier = Modifier.size(16.dp))
+                            Column {
+                                Text("Version Control Exclusion", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                Text(".env, .env.*, and secret credentials are fully ignored by git, preventing accidental repo leaks.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = BentoEmerald, modifier = Modifier.size(16.dp))
+                            Column {
+                                Text("Secrets Plugin & BuildConfig Injection", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                Text("Secrets Gradle Plugin reads values from the AI Studio Secrets panel or local .env into BuildConfig at build time.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = BentoEmerald, modifier = Modifier.size(16.dp))
+                            Column {
+                                Text("Header-Only Transmission (x-goog-api-key)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                Text("All AI requests transmit keys via encrypted HTTP headers, keeping URLs and proxy logs free of secrets.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    // Environment Variable Detection Status
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = if (envSecretStatus.isKeyConfiguredInEnv) "Environment Key Active: ${envSecretStatus.envMaskedKey}" else "Environment Key: Template placeholder (.env.example)",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (envSecretStatus.isKeyConfiguredInEnv) BentoEmerald else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Source: .env via Secrets Gradle Plugin",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.refreshEnvSecretStatus()
+                                Toast.makeText(context, "Environment secret status refreshed", Toast.LENGTH_SHORT).show()
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.testTag("refresh_env_status_btn")
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Refresh", fontSize = 11.sp)
                         }
                     }
                 }

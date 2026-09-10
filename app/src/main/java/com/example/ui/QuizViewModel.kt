@@ -116,6 +116,29 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     val isCloudConnected: StateFlow<Boolean> = firestoreManager.isCloudConnected
     val cloudSyncMessage: StateFlow<String> = firestoreManager.cloudSyncMessage
 
+    // --- Firebase App Check Enforcement & Environment Variable Secret Strategy ---
+    val appCheckStatus = firestoreManager.appCheckManager.appCheckStatus
+    val envSecretStatus = geminiApiKeyManager.envSecretStatus
+
+    fun verifyAppCheckAttestation(onResult: ((Boolean, String) -> Unit)? = null) {
+        viewModelScope.launch {
+            val result = firestoreManager.appCheckManager.verifyAttestation(forceRefresh = true)
+            if (result.isSuccess) {
+                val snippet = result.getOrNull() ?: "Verified"
+                _uiEventMessage.value = "Firebase App Check attested: Token $snippet enforced"
+                onResult?.invoke(true, "App Check attested successfully ($snippet)")
+            } else {
+                val errorMsg = result.exceptionOrNull()?.message ?: "Attestation failed"
+                _uiEventMessage.value = "App Check attestation: $errorMsg"
+                onResult?.invoke(false, errorMsg)
+            }
+        }
+    }
+
+    fun refreshEnvSecretStatus() {
+        geminiApiKeyManager.refreshEnvSecretStatus()
+    }
+
     // --- State Flows ---
     val allUsers: StateFlow<List<UserEntity>> = repository.allUsers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
