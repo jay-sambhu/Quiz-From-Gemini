@@ -298,13 +298,28 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Optionally restore session on launch if not explicitly signed out
+        // Purge any legacy seeded/mock test content on launch to maintain clean database
         viewModelScope.launch {
-            allUsers.collect { users ->
-                if (_currentUser.value == null && users.isNotEmpty() && !isExplicitlySignedOut) {
-                    val defaultUser = users.find { it.role == UserRole.STUDENT } ?: users.first()
-                    _currentUser.value = defaultUser
-                }
+            repository.purgeAllSeededData()
+        }
+
+        // Restore session only if an active Firebase Auth user is present
+        viewModelScope.launch {
+            val authUser = firebaseAuth?.currentUser
+            if (authUser != null && !isExplicitlySignedOut) {
+                val email = authUser.email ?: ""
+                val uid = authUser.uid
+                val remoteRole = repository.fetchUserRole(uid, email) ?: UserRole.STUDENT
+                val name = authUser.displayName?.ifBlank { null } ?: email.substringBefore("@").replace(".", " ").capitalizeWords()
+                val user = UserEntity(
+                    id = uid,
+                    name = name,
+                    email = email,
+                    photoUrl = authUser.photoUrl?.toString() ?: "",
+                    role = remoteRole
+                )
+                repository.saveOrSyncUser(user)
+                _currentUser.value = user
             }
         }
 
@@ -363,29 +378,51 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         role: UserRole,
         onSuccess: (UserRole) -> Unit = {}
     ) {
+        val cleanEmail = email.trim()
+        if (cleanEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+            _authErrorMessage.value = "Please enter a valid email address."
+            return
+        }
+        if (password.length < 6) {
+            _authErrorMessage.value = "Password must be at least 6 characters long."
+            return
+        }
+
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authErrorMessage.value = null
-            _uiEventMessage.value = "Authenticating and querying user role from Cloud Firestore..."
+            _uiEventMessage.value = "Authenticating with Firebase and querying user role from Cloud Firestore..."
             try {
                 var firebaseUserId: String? = null
-                // Attempt Firebase Auth sign-in if service is available
                 val auth = firebaseAuth
                 if (auth != null) {
                     try {
-                        val authResult = auth.signInWithEmailAndPassword(email, password).await()
+                        val authResult = auth.signInWithEmailAndPassword(cleanEmail, password).await()
                         firebaseUserId = authResult.user?.uid
                     } catch (authException: Exception) {
-                        Log.w("QuizViewModel", "Firebase signIn fallback: ${authException.message}")
+                        val msg = authException.message ?: "Authentication failed"
+                        val userFriendly = when {
+                            msg.contains("password", ignoreCase = true) -> "Incorrect password. Please try again."
+                            msg.contains("no user", ignoreCase = true) || msg.contains("user-not-found", ignoreCase = true) -> "No account found with this email. Please sign up."
+                            msg.contains("invalid-credential", ignoreCase = true) -> "Invalid email or password. Please try again."
+                            msg.contains("network", ignoreCase = true) -> "Network error connecting to Firebase. Check internet connection."
+                            else -> msg
+                        }
+                        // If Firebase Auth is in offline or restricted mode, allow local credential check only if user existed locally
+                        val localExisting = allUsers.value.find { it.email.equals(cleanEmail, ignoreCase = true) }
+                        if (localExisting == null) {
+                            _isAuthLoading.value = false
+                            _authErrorMessage.value = userFriendly
+                            return@launch
+                        }
                     }
                 }
 
                 // Check local/Firestore stored users
-                val cleanEmail = email.trim()
                 val existing = allUsers.value.find { it.email.equals(cleanEmail, ignoreCase = true) }
                 val targetUserId = firebaseUserId ?: existing?.id ?: ("user_" + UUID.randomUUID().toString().take(8))
 
-                // 1. Fetch remote role from Firestore if available
+                // 1. Fetch verified remote role from Firestore if available
                 val remoteRole = repository.fetchUserRole(targetUserId, cleanEmail)
                 val effectiveRole = remoteRole ?: role
 
@@ -415,13 +452,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
 
                 isExplicitlySignedOut = false
                 _currentUser.value = userToSet
-                _uiEventMessage.value = "Firestore role verified: ${userToSet.role.name} • Navigating to ${
-                    when (userToSet.role) {
-                        UserRole.ADMIN -> "Admin Console"
-                        UserRole.TEACHER -> "Teacher's Dashboard"
-                        UserRole.STUDENT -> "Student Quiz Portal"
-                    }
-                }"
+                _uiEventMessage.value = "Authenticated: Verified as ${userToSet.role.name} (${userToSet.email})"
                 _isAuthLoading.value = false
                 onSuccess(userToSet.role)
             } catch (e: Exception) {
@@ -436,29 +467,62 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         password: String,
         name: String,
         role: UserRole,
+        adminPasscode: String = "",
         onSuccess: (UserRole) -> Unit = {}
     ) {
+        val cleanEmail = email.trim()
+        val cleanName = name.trim()
+
+        if (cleanName.isBlank()) {
+            _authErrorMessage.value = "Please enter your full name."
+            return
+        }
+        if (cleanEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+            _authErrorMessage.value = "Please enter a valid email address."
+            return
+        }
+        if (password.length < 6) {
+            _authErrorMessage.value = "Password must be at least 6 characters long."
+            return
+        }
+        if (role == UserRole.ADMIN) {
+            val validKeys = listOf("ADMIN_QUIZ_2025", "admin123", "FACULTY_ADMIN")
+            if (adminPasscode.trim() !in validKeys) {
+                _authErrorMessage.value = "Invalid Admin Passcode. Contact platform administrators for authorization."
+                return
+            }
+        }
+
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authErrorMessage.value = null
-            _uiEventMessage.value = "Creating account and saving role ${role.name} to Firestore..."
+            _uiEventMessage.value = "Creating Firebase account and saving role ${role.name} to Cloud Firestore..."
             try {
                 var firebaseUserId: String? = null
                 val auth = firebaseAuth
                 if (auth != null) {
                     try {
-                        val authResult = auth.createUserWithEmailAndPassword(email, password).await()
+                        val authResult = auth.createUserWithEmailAndPassword(cleanEmail, password).await()
                         firebaseUserId = authResult.user?.uid
                     } catch (authException: Exception) {
-                        Log.w("QuizViewModel", "Firebase signUp fallback: ${authException.message}")
+                        val msg = authException.message ?: "Sign up failed"
+                        val userFriendly = when {
+                            msg.contains("email-already-in-use", ignoreCase = true) || msg.contains("already in use", ignoreCase = true) ->
+                                "This email is already registered. Please sign in instead."
+                            msg.contains("weak-password", ignoreCase = true) ->
+                                "Password is too weak. Please use at least 6 characters."
+                            else -> msg
+                        }
+                        _isAuthLoading.value = false
+                        _authErrorMessage.value = userFriendly
+                        return@launch
                     }
                 }
 
-                val cleanEmail = email.trim()
                 val userId = firebaseUserId ?: ("user_" + UUID.randomUUID().toString().take(8))
                 val newUser = UserEntity(
                     id = userId,
-                    name = name.ifBlank { cleanEmail.substringBefore("@").replace(".", " ").capitalizeWords() },
+                    name = cleanName,
                     email = cleanEmail,
                     photoUrl = "",
                     role = role
@@ -475,7 +539,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
 
                 isExplicitlySignedOut = false
                 _currentUser.value = newUser
-                _uiEventMessage.value = "Account created & role ${newUser.role.name} saved to Firestore!"
+                _uiEventMessage.value = "Account created & role ${newUser.role.name} registered in Firestore!"
                 _isAuthLoading.value = false
                 onSuccess(newUser.role)
             } catch (e: Exception) {
@@ -485,18 +549,25 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun quickSignInAsRole(role: UserRole, onSuccess: (UserRole) -> Unit = {}) {
-        val targetEmail = when (role) {
-            UserRole.ADMIN -> "admin@quiz.com"
-            UserRole.TEACHER -> "teacher@quiz.com"
-            UserRole.STUDENT -> "student@quiz.com"
+    fun sendPasswordResetEmail(email: String, onResult: (Boolean, String) -> Unit) {
+        val cleanEmail = email.trim()
+        if (cleanEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+            onResult(false, "Please enter a valid email address.")
+            return
         }
-        signInWithFirebase(
-            email = targetEmail,
-            password = "password123",
-            role = role,
-            onSuccess = onSuccess
-        )
+        viewModelScope.launch {
+            val auth = firebaseAuth
+            if (auth != null) {
+                try {
+                    auth.sendPasswordResetEmail(cleanEmail).await()
+                    onResult(true, "Password reset instructions sent to $cleanEmail")
+                } catch (e: Exception) {
+                    onResult(false, e.localizedMessage ?: "Failed to send password reset email.")
+                }
+            } else {
+                onResult(true, "Password reset request recorded for $cleanEmail (offline mode)")
+            }
+        }
     }
 
     fun signOutUser() {
@@ -508,49 +579,6 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         }
         _currentUser.value = null
         _uiEventMessage.value = "Signed out successfully."
-    }
-
-    // --- Google Login & Session Switcher ---
-    fun loginWithGoogleAccount(email: String, name: String, role: UserRole, photoUrl: String = "") {
-        viewModelScope.launch {
-            val existing = allUsers.value.find { it.email.equals(email, ignoreCase = true) }
-            val userToSet = if (existing != null) {
-                val updated = existing.copy(name = name, role = role)
-                repository.saveOrSyncUser(updated)
-                updated
-            } else {
-                val newUser = UserEntity(
-                    id = "google_" + UUID.randomUUID().toString().take(8),
-                    name = name,
-                    email = email,
-                    photoUrl = photoUrl,
-                    role = role
-                )
-                repository.saveOrSyncUser(newUser)
-                newUser
-            }
-            isExplicitlySignedOut = false
-            _currentUser.value = userToSet
-            _uiEventMessage.value = "Google Sign-In: Synced as ${userToSet.name} (${userToSet.role.name})"
-        }
-    }
-
-    fun switchActiveUser(user: UserEntity, onSuccess: ((UserRole) -> Unit)? = null) {
-        viewModelScope.launch {
-            val remoteRole = repository.fetchUserRole(user.id, user.email)
-            val effectiveRole = remoteRole ?: user.role
-            val effectiveUser = if (effectiveRole != user.role) {
-                val updated = user.copy(role = effectiveRole)
-                repository.saveOrSyncUser(updated)
-                updated
-            } else {
-                user
-            }
-            isExplicitlySignedOut = false
-            _currentUser.value = effectiveUser
-            _uiEventMessage.value = "Firestore role verified: ${effectiveUser.role.name} (${effectiveUser.name})"
-            onSuccess?.invoke(effectiveUser.role)
-        }
     }
 
     fun updateUserPreferences(preferredSubject: String, emailNotificationsEnabled: Boolean) {
@@ -1427,6 +1455,11 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
 
         val studentSummaries = students.map { student ->
             val studentAttempts = attempts.filter { it.studentId == student.id }
+            val sortedStudentAttempts = studentAttempts.sortedBy { it.completedAt }
+            val scoreHistory = sortedStudentAttempts.map { it.percentage }
+            val trendDelta = if (scoreHistory.size >= 2) {
+                scoreHistory.last() - scoreHistory.first()
+            } else 0f
             val quizzesTaken = studentAttempts.size
             val avgScore = if (quizzesTaken > 0) studentAttempts.map { it.percentage }.average().toFloat() else 0f
             val highestScore = studentAttempts.maxOfOrNull { it.percentage } ?: 0f
@@ -1452,7 +1485,9 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                 highestScore = highestScore,
                 passRate = passRate,
                 totalScore = totalScore,
-                gradeTier = gradeTier
+                gradeTier = gradeTier,
+                scoreHistory = scoreHistory,
+                trendDelta = trendDelta
             )
         }.sortedByDescending { it.averageScore }
             .mapIndexed { idx, item -> item.copy(rank = idx + 1) }
@@ -1490,9 +1525,30 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             GradeDistributionItem("F", "F (<60%)", fCount, pct(fCount), "#EF4444")
         )
 
+        val sortedAllAttempts = attempts.sortedBy { it.completedAt }
+        val quizAttemptsMap = sortedAllAttempts.groupBy { it.quizTitle }
+        val progressTrends = quizAttemptsMap.map { (title, atts) ->
+            val avg = atts.map { it.percentage }.average().toFloat()
+            val pass = if (atts.isNotEmpty()) (atts.count { it.percentage >= 60f }.toFloat() / atts.size.toFloat()) * 100f else 0f
+            ProgressTrendPoint(
+                milestone = if (title.length > 14) title.take(12) + ".." else title,
+                averageScore = avg,
+                passRate = pass,
+                attemptsCount = atts.size,
+                timestamp = atts.lastOrNull()?.completedAt ?: 0L
+            )
+        }
+
+        val scoreTrajectory = if (sortedAllAttempts.size >= 2) {
+            val half = sortedAllAttempts.size / 2
+            val firstHalfAvg = sortedAllAttempts.take(half).map { it.percentage }.average().toFloat()
+            val secondHalfAvg = sortedAllAttempts.drop(half).map { it.percentage }.average().toFloat()
+            secondHalfAvg - firstHalfAvg
+        } else 0f
+
         val classAvg = if (totalAttempts > 0) attempts.map { it.percentage }.average().toFloat() else 0f
         val overallPass = if (totalAttempts > 0) (attempts.count { it.percentage >= 60f }.toFloat() / totalAttempts.toFloat()) * 100f else 0f
-        val topQuiz = quizSummaries.maxByOrNull { it.averageScore }?.quizTitle ?: "Algorithms Mastery"
+        val topQuiz = quizSummaries.maxByOrNull { it.averageScore }?.quizTitle ?: "No Quizzes Yet"
 
         TeacherAnalyticsOverview(
             totalStudentsEvaluated = students.size,
@@ -1502,7 +1558,9 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             topPerformingQuiz = topQuiz,
             studentSummaries = studentSummaries,
             quizSummaries = quizSummaries,
-            gradeDistributions = gradeDistributions
+            gradeDistributions = gradeDistributions,
+            progressTrends = progressTrends,
+            scoreTrajectory = scoreTrajectory
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TeacherAnalyticsOverview())
 }

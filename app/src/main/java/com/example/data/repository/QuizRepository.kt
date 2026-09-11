@@ -473,4 +473,17 @@ class QuizRepository(
             item.copy(rank = rank, percentile = percentile)
         }
     }
+
+    suspend fun purgeAllSeededData() {
+        try {
+            quizDao.purgeSeededUsers()
+            quizDao.purgeSeededQuizSets()
+            quizDao.purgeSeededQuestions()
+            quizDao.purgeSeededAttempts()
+            quizDao.purgeSeededNotificationLogs()
+            quizDao.purgeSeededCategories()
+        } catch (e: Exception) {
+            Log.w("QuizRepository", "Purge seeded data note: ${e.message}")
+        }
+    }
 }

@@ -111,14 +111,14 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
             _isCloudConnected.value = true
             _cloudSyncMessage.value = "Cloud Firestore: Active & Synced"
             Log.d(TAG, "Firebase Firestore initialized successfully.")
-            seedInitialSystemLogs(firestore!!)
-            // Security safeguard: purge any legacy API keys document from cloud config
+            // Security safeguard: purge any legacy API keys and mock seeded documents from cloud
             purgeCloudApiKeysIfPresent(firestore!!)
+            purgeLegacySeededDocuments(firestore!!)
         } catch (e: Throwable) {
             Log.w(TAG, "Firebase Firestore fallback mode: ${e.message}")
             _isCloudConnected.value = false
             _cloudSyncMessage.value = "Cloud Firestore: Offline Cache Mode"
-            _systemLogs.value = getDefaultSystemLogs()
+            _systemLogs.value = emptyList()
         }
     }
 
@@ -1070,161 +1070,37 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
         }
     }
 
-    private fun seedInitialSystemLogs(db: FirebaseFirestore) {
+    private fun purgeLegacySeededDocuments(db: FirebaseFirestore) {
         scope.launch {
             try {
-                val existing = db.collection(COLLECTION_SYSTEM_LOGS).limit(1).get().awaitTask()
-                if (existing.isEmpty) {
-                    val defaults = getDefaultSystemLogs()
-                    defaults.forEach { item ->
-                        val map = mapOf(
-                            "id" to item.id,
-                            "title" to item.title,
-                            "description" to item.description,
-                            "category" to item.category,
-                            "severity" to item.severity,
-                            "actor" to item.actor,
-                            "timestamp" to item.timestamp
-                        )
-                        db.collection(COLLECTION_SYSTEM_LOGS).document(item.id)
-                            .set(map, SetOptions.merge())
-                    }
-                    _systemLogs.value = defaults
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Default system logs seed skipped: ${e.message}")
-                if (_systemLogs.value.isEmpty()) {
-                    _systemLogs.value = getDefaultSystemLogs()
-                }
-            }
-        }
-    }
-
-    private fun getDefaultSystemLogs(): List<SystemLogItem> {
-        val now = System.currentTimeMillis()
-        return listOf(
-            SystemLogItem(
-                id = "log_init_00_appcheck",
-                title = "Firebase App Check Request Enforcement",
-                description = "Backend security attestation active. Protecting Cloud Firestore and Firebase resources from unauthorized traffic.",
-                category = "SECURITY",
-                severity = "SUCCESS",
-                actor = "Firebase App Check",
-                timestamp = now - 3600000 * 5
-            ),
-            SystemLogItem(
-                id = "log_init_01",
-                title = "Cloud Security Rules Enforced",
-                description = "Multi-role access tiers activated for Admin, Teacher, and Student roles with Firestore rules.",
-                category = "SECURITY",
-                severity = "SUCCESS",
-                actor = "Cloud IAM Policy",
-                timestamp = now - 3600000 * 4
-            ),
-            SystemLogItem(
-                id = "log_init_02",
-                title = "Gemini 3.5 Flash Model Provisioned",
-                description = "AI question generator calibrated with pedagogical Bloom's taxonomy criteria.",
-                category = "AI_ENGINE",
-                severity = "INFO",
-                actor = "Gemini Service",
-                timestamp = now - 3600000 * 3
-            ),
-            SystemLogItem(
-                id = "log_init_03",
-                title = "Curriculum Bank Synchronized",
-                description = "Subject categories and verified quiz sets indexed across Science, Math, and History.",
-                category = "QUIZ_ACTIVITY",
-                severity = "INFO",
-                actor = "Curriculum Bot",
-                timestamp = now - 3600000 * 2
-            ),
-            SystemLogItem(
-                id = "log_init_04",
-                title = "Realtime Firestore Snapshot Active",
-                description = "Bi-directional listeners established for all platform data collections with offline Room cache.",
-                category = "FIRESTORE_SYNC",
-                severity = "SUCCESS",
-                actor = "Firestore Engine",
-                timestamp = now - 1800000
-            ),
-            SystemLogItem(
-                id = "log_init_05",
-                title = "Role Validation Audit Passed",
-                description = "Multi-tenant access verified. Admin control console active with elevated permissions.",
-                category = "SECURITY",
-                severity = "SUCCESS",
-                actor = "Security Daemon",
-                timestamp = now - 600000
-            )
-        )
-    }
-
-    private fun seedInitialRoleProfiles(db: FirebaseFirestore) {
-        scope.launch {
-            try {
-                // Ensure canonical role accounts are registered in Firestore
-                val defaultRoles = listOf(
-                    mapOf(
-                        "id" to "user_admin_default",
-                        "name" to "Dr. Eleanor Vance",
-                        "email" to "admin@quiz.com",
-                        "role" to UserRole.ADMIN.name,
-                        "preferredSubject" to "All",
-                        "updatedAt" to System.currentTimeMillis()
-                    ),
-                    mapOf(
-                        "id" to "google_admin_001",
-                        "name" to "Dr. Eleanor Vance",
-                        "email" to "admin@quizplatform.edu",
-                        "role" to UserRole.ADMIN.name,
-                        "preferredSubject" to "All",
-                        "updatedAt" to System.currentTimeMillis()
-                    ),
-                    mapOf(
-                        "id" to "user_teacher_default",
-                        "name" to "Prof. Alan Turing",
-                        "email" to "teacher@quiz.com",
-                        "role" to UserRole.TEACHER.name,
-                        "preferredSubject" to "Computer Science",
-                        "updatedAt" to System.currentTimeMillis()
-                    ),
-                    mapOf(
-                        "id" to "google_teacher_001",
-                        "name" to "Prof. Alan Turing",
-                        "email" to "alan.turing@quizplatform.edu",
-                        "role" to UserRole.TEACHER.name,
-                        "preferredSubject" to "Computer Science",
-                        "updatedAt" to System.currentTimeMillis()
-                    ),
-                    mapOf(
-                        "id" to "user_student_default",
-                        "name" to "Aashish Gentleman",
-                        "email" to "student@quiz.com",
-                        "role" to UserRole.STUDENT.name,
-                        "preferredSubject" to "Computer Science",
-                        "updatedAt" to System.currentTimeMillis()
-                    ),
-                    mapOf(
-                        "id" to "google_student_001",
-                        "name" to "Aashish Gentleman",
-                        "email" to "gentlemanaashish222@gmail.com",
-                        "role" to UserRole.STUDENT.name,
-                        "preferredSubject" to "Computer Science",
-                        "updatedAt" to System.currentTimeMillis()
-                    )
+                val dummyUserIds = listOf(
+                    "user_admin_default", "google_admin_001",
+                    "user_teacher_default", "google_teacher_001",
+                    "user_student_default", "google_student_001",
+                    "google_student_002", "google_student_003"
+                )
+                val dummyQuizIds = listOf(
+                    "quiz_cs_01", "quiz_math_01", "quiz_sci_01", "quiz_hist_01", "quiz_prob_01"
+                )
+                val dummyLogIds = listOf(
+                    "log_init_00_appcheck", "log_init_01", "log_init_02",
+                    "log_init_03", "log_init_04", "log_init_05"
                 )
 
                 val batch = db.batch()
-                defaultRoles.forEach { profile ->
-                    val docId = profile["id"] as String
-                    val docRef = db.collection(COLLECTION_USERS).document(docId)
-                    batch.set(docRef, profile, SetOptions.merge())
+                dummyUserIds.forEach { uid ->
+                    batch.delete(db.collection(COLLECTION_USERS).document(uid))
+                }
+                dummyQuizIds.forEach { qid ->
+                    batch.delete(db.collection(COLLECTION_QUIZ_SETS).document(qid))
+                }
+                dummyLogIds.forEach { lid ->
+                    batch.delete(db.collection(COLLECTION_SYSTEM_LOGS).document(lid))
                 }
                 batch.commit().awaitTask()
-                Log.d(TAG, "Initial canonical role profiles verified in Firestore.")
+                Log.d(TAG, "Legacy seeded documents successfully purged from Firestore.")
             } catch (e: Exception) {
-                Log.w(TAG, "Initial role profiles seed in Firestore skipped: ${e.message}")
+                Log.w(TAG, "Legacy seeded documents purge check: ${e.message}")
             }
         }
     }

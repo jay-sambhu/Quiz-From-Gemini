@@ -18,6 +18,14 @@ data class StudentLeaderboardEntry(
     val lastActiveTimestamp: Long = 0L
 )
 
+data class ProgressTrendPoint(
+    val milestone: String,
+    val averageScore: Float,
+    val passRate: Float,
+    val attemptsCount: Int,
+    val timestamp: Long = 0L
+)
+
 data class StudentPerformanceSummary(
     val studentId: String,
     val studentName: String,
@@ -29,7 +37,9 @@ data class StudentPerformanceSummary(
     val totalScore: Int,
     val rank: Int = 1,
     val gradeTier: String = "A",
-    val statusColor: String = "#10B981"
+    val statusColor: String = "#10B981",
+    val scoreHistory: List<Float> = emptyList(),
+    val trendDelta: Float = 0f
 )
 
 data class QuizPerformanceSummary(
@@ -57,12 +67,15 @@ data class TeacherAnalyticsOverview(
     val topPerformingQuiz: String = "None",
     val studentSummaries: List<StudentPerformanceSummary> = emptyList(),
     val quizSummaries: List<QuizPerformanceSummary> = emptyList(),
-    val gradeDistributions: List<GradeDistributionItem> = emptyList()
+    val gradeDistributions: List<GradeDistributionItem> = emptyList(),
+    val progressTrends: List<ProgressTrendPoint> = emptyList(),
+    val scoreTrajectory: Float = 0f
 )
 
 enum class ChartDisplayMode(val label: String) {
-    STUDENTS("Students"),
+    TRENDS("Trends"),
     QUIZZES("Quizzes"),
+    STUDENTS("Students"),
     DISTRIBUTION("Grades")
 }
 

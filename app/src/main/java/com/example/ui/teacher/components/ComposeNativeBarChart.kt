@@ -22,7 +22,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChartDisplayMode
+import com.example.data.model.ProgressTrendPoint
 import com.example.data.model.TeacherAnalyticsOverview
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoPillTag
@@ -77,6 +81,7 @@ fun ComposeNativeBarChart(
             ) {
                 Text(
                     text = when (chartMode) {
+                        ChartDisplayMode.TRENDS -> "Progress Trends & Trajectory"
                         ChartDisplayMode.STUDENTS -> "Student Average Scores"
                         ChartDisplayMode.QUIZZES -> "Quiz Scores vs Pass Rates"
                         ChartDisplayMode.DISTRIBUTION -> "Class Grade Distribution"
@@ -96,7 +101,10 @@ fun ComposeNativeBarChart(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Interactive Canvas • Touch any bar to inspect student breakdown",
+                text = when (chartMode) {
+                    ChartDisplayMode.TRENDS -> "Interactive Canvas • Touch any node to inspect milestone metrics"
+                    else -> "Interactive Canvas • Touch any bar to inspect student breakdown"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -113,6 +121,15 @@ fun ComposeNativeBarChart(
                     .padding(horizontal = 12.dp, vertical = 12.dp)
             ) {
                 when (chartMode) {
+                    ChartDisplayMode.TRENDS -> {
+                        val trends = overview.progressTrends.take(8)
+                        NativeTrendLineCanvas(
+                            trends = trends,
+                            progress = progressAnim,
+                            selectedIndex = selectedIndex,
+                            onSelect = { selectedIndex = it }
+                        )
+                    }
                     ChartDisplayMode.STUDENTS -> {
                         val students = overview.studentSummaries.take(7)
                         NativeStudentBarCanvas(
@@ -476,6 +493,16 @@ private fun SelectedBarDetailsPill(
             verticalAlignment = Alignment.CenterVertically
         ) {
             when (chartMode) {
+                ChartDisplayMode.TRENDS -> {
+                    val t = overview.progressTrends.getOrNull(selectedIndex)
+                    if (t != null) {
+                        Text(
+                            text = "${t.milestone}: ${String.format("%.1f", t.averageScore)}% Avg, ${String.format("%.1f", t.passRate)}% Pass (${t.attemptsCount} attempts)",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
                 ChartDisplayMode.STUDENTS -> {
                     val s = overview.studentSummaries.getOrNull(selectedIndex)
                     if (s != null) {
@@ -513,6 +540,223 @@ private fun SelectedBarDetailsPill(
                 contentPadding = PaddingValues(0.dp)
             ) {
                 Text("Close", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NativeTrendLineCanvas(
+    trends: List<ProgressTrendPoint>,
+    progress: Float,
+    selectedIndex: Int?,
+    onSelect: (Int) -> Unit
+) {
+    if (trends.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "📈",
+                    fontSize = 28.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "No Progress Trends Yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Quiz attempts will generate class trajectory over time",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+
+    val primaryColor = BentoPrimary
+    val passColor = BentoEmerald
+    val targetColor = Color(0xFFF59E0B)
+    val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    val textStyleColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(trends) {
+                        detectTapGestures { offset ->
+                            val n = trends.size
+                            if (n == 1) {
+                                onSelect(0)
+                            } else {
+                                val padLeft = 36.dp.toPx()
+                                val padRight = 16.dp.toPx()
+                                val plotW = size.width - padLeft - padRight
+                                val step = plotW / (n - 1)
+                                val relX = offset.x - padLeft
+                                val idx = (relX / step + 0.5f).toInt().coerceIn(0, n - 1)
+                                onSelect(idx)
+                            }
+                        }
+                    }
+            ) {
+                val padLeft = 36.dp.toPx()
+                val padRight = 16.dp.toPx()
+                val padTop = 20.dp.toPx()
+                val padBottom = 20.dp.toPx()
+
+                val plotW = size.width - padLeft - padRight
+                val plotH = size.height - padTop - padBottom
+
+                // Grid lines (0%, 25%, 50%, 75%, 100%)
+                for (i in 0..4) {
+                    val y = padTop + (plotH / 4f) * i
+                    drawLine(
+                        color = gridColor,
+                        start = Offset(padLeft, y),
+                        end = Offset(size.width - padRight, y),
+                        strokeWidth = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f))
+                    )
+                }
+
+                // 75% Target Line
+                val targetY = padTop + plotH * (1f - 0.75f)
+                drawLine(
+                    color = targetColor.copy(alpha = 0.8f),
+                    start = Offset(padLeft, targetY),
+                    end = Offset(size.width - padRight, targetY),
+                    strokeWidth = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f))
+                )
+
+                val n = trends.size
+                val points = trends.mapIndexed { idx, item ->
+                    val x = if (n == 1) {
+                        padLeft + plotW / 2f
+                    } else {
+                        padLeft + idx * (plotW / (n - 1))
+                    }
+                    val effectiveScore = (item.averageScore * progress).coerceIn(0f, 100f)
+                    val y = padTop + plotH * (1f - effectiveScore / 100f)
+                    Offset(x, y)
+                }
+
+                // Fill Area gradient under curve
+                if (points.isNotEmpty()) {
+                    val areaPath = Path().apply {
+                        moveTo(points.first().x, padTop + plotH)
+                        for (p in points) {
+                            lineTo(p.x, p.y)
+                        }
+                        lineTo(points.last().x, padTop + plotH)
+                        close()
+                    }
+                    drawPath(
+                        path = areaPath,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                primaryColor.copy(alpha = 0.28f),
+                                primaryColor.copy(alpha = 0.02f)
+                            ),
+                            startY = padTop,
+                            endY = padTop + plotH
+                        ),
+                        style = Fill
+                    )
+
+                    // Line Stroke
+                    val linePath = Path().apply {
+                        moveTo(points.first().x, points.first().y)
+                        for (i in 1 until points.size) {
+                            lineTo(points[i].x, points[i].y)
+                        }
+                    }
+                    drawPath(
+                        path = linePath,
+                        color = primaryColor,
+                        style = Stroke(width = 3.dp.toPx())
+                    )
+
+                    // Secondary pass rate line
+                    val passPoints = trends.mapIndexed { idx, item ->
+                        val x = if (n == 1) padLeft + plotW / 2f else padLeft + idx * (plotW / (n - 1))
+                        val effPass = (item.passRate * progress).coerceIn(0f, 100f)
+                        val y = padTop + plotH * (1f - effPass / 100f)
+                        Offset(x, y)
+                    }
+                    val passPath = Path().apply {
+                        moveTo(passPoints.first().x, passPoints.first().y)
+                        for (i in 1 until passPoints.size) {
+                            lineTo(passPoints[i].x, passPoints[i].y)
+                        }
+                    }
+                    drawPath(
+                        path = passPath,
+                        color = passColor,
+                        style = Stroke(
+                            width = 2.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f))
+                        )
+                    )
+
+                    // Draw circles at data points
+                    points.forEachIndexed { idx, p ->
+                        val isSelected = selectedIndex == idx
+                        val radius = if (isSelected) 7.dp.toPx() else 4.5f.dp.toPx()
+                        
+                        if (isSelected) {
+                            drawCircle(
+                                color = primaryColor.copy(alpha = 0.25f),
+                                radius = 12.dp.toPx(),
+                                center = p
+                            )
+                        }
+                        
+                        drawCircle(
+                            color = primaryColor,
+                            radius = radius,
+                            center = p
+                        )
+                        drawCircle(
+                            color = Color.White,
+                            radius = radius * 0.45f,
+                            center = p
+                        )
+                    }
+                }
+            }
+        }
+
+        // Milestone labels along bottom
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 36.dp, end = 16.dp, top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            trends.forEachIndexed { idx, t ->
+                val isSelected = selectedIndex == idx
+                Text(
+                    text = if (t.milestone.length > 9) t.milestone.take(8) + ".." else t.milestone,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) BentoPrimary else textStyleColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

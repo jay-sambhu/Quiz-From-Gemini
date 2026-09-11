@@ -22,6 +22,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -178,12 +179,16 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                                 text = "Welcome, ${currentUser?.name ?: "Professor"}",
                                 color = Color.White,
                                 style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = "Create tests or leverage Gemini AI to generate question sets instantly.",
                                 color = Color.White.copy(alpha = 0.85f),
-                                style = MaterialTheme.typography.bodySmall
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -257,10 +262,15 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            when (selectedTab) {
-                0 -> {
-                    // If Gemini AI is actively generating in foreground or background, display subtle shimmer progress card
-                    if (isGeneratingAi) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                when (selectedTab) {
+                    0 -> {
+                        // If Gemini AI is actively generating in foreground or background, display subtle shimmer progress card
+                        if (isGeneratingAi) {
                     BentoCard(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -349,9 +359,7 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
 
                 if (teacherQuizzes.isEmpty() && !isGeneratingAi) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -565,6 +573,7 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
             }
         }
     }
+}
 
     if (showCreateDialog) {
         CreateQuizModalDialog(

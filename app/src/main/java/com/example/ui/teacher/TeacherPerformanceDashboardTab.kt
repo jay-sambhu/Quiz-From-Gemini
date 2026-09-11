@@ -50,10 +50,11 @@ fun TeacherPerformanceDashboardTab(
 ) {
     val analyticsOverview by viewModel.teacherAnalyticsOverview.collectAsState()
 
-    var selectedMode by remember { mutableStateOf(ChartDisplayMode.STUDENTS) }
+    var selectedMode by remember { mutableStateOf(ChartDisplayMode.TRENDS) }
     var selectedEngine by remember { mutableStateOf(ChartEngineType.RECHARTS) }
     var studentSearchQuery by remember { mutableStateOf("") }
     var selectedFilterTier by remember { mutableStateOf("ALL") } // ALL, HONORS, PASSING, ATTENTION
+    var selectedStudentForDetail by remember { mutableStateOf<StudentPerformanceSummary?>(null) }
 
     val filteredStudents = remember(analyticsOverview.studentSummaries, studentSearchQuery, selectedFilterTier) {
         analyticsOverview.studentSummaries.filter { student ->
@@ -121,6 +122,70 @@ fun TeacherPerformanceDashboardTab(
             }
         }
 
+        // Progress Trajectory Highlights Banner
+        if (analyticsOverview.progressTrends.isNotEmpty()) {
+            item {
+                val trajectory = analyticsOverview.scoreTrajectory
+                val isPositive = trajectory >= 0f
+                val trajectoryColor = if (isPositive) BentoEmerald else Color(0xFFEF4444)
+                val trajectoryIcon = if (isPositive) Icons.Default.TrendingUp else Icons.Default.TrendingDown
+                val trajectoryText = if (isPositive) "+${String.format("%.1f", trajectory)}% Growth" else "${String.format("%.1f", trajectory)}% Dip"
+
+                BentoCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("progress_trajectory_card"),
+                    cornerRadius = 16.dp,
+                    padding = 12.dp
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(trajectoryColor.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = trajectoryIcon,
+                                    contentDescription = null,
+                                    tint = trajectoryColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Class Score Trajectory",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "${analyticsOverview.progressTrends.size} learning milestones evaluated",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        BentoPillTag(
+                            text = trajectoryText,
+                            containerColor = trajectoryColor.copy(alpha = 0.12f),
+                            contentColor = trajectoryColor,
+                            icon = trajectoryIcon
+                        )
+                    }
+                }
+            }
+        }
+
         // View Controls Toolbar (Chart Mode + Engine Selection)
         item {
             BentoCard(
@@ -139,37 +204,49 @@ fun TeacherPerformanceDashboardTab(
                     Spacer(modifier = Modifier.height(6.dp))
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         SegmentedButton(
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-                            onClick = { selectedMode = ChartDisplayMode.STUDENTS },
-                            selected = selectedMode == ChartDisplayMode.STUDENTS,
-                            label = { Text("Students", fontSize = 12.sp) },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4),
+                            onClick = { selectedMode = ChartDisplayMode.TRENDS },
+                            selected = selectedMode == ChartDisplayMode.TRENDS,
+                            label = { Text("Trends", fontSize = 11.sp) },
                             icon = {
-                                if (selectedMode == ChartDisplayMode.STUDENTS) {
-                                    Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp))
+                                if (selectedMode == ChartDisplayMode.TRENDS) {
+                                    Icon(Icons.Default.TrendingUp, contentDescription = null, modifier = Modifier.size(15.dp))
                                 }
                             },
-                            modifier = Modifier.testTag("mode_students_btn")
+                            modifier = Modifier.testTag("mode_trends_btn")
                         )
                         SegmentedButton(
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4),
                             onClick = { selectedMode = ChartDisplayMode.QUIZZES },
                             selected = selectedMode == ChartDisplayMode.QUIZZES,
-                            label = { Text("Quizzes", fontSize = 12.sp) },
+                            label = { Text("Quizzes", fontSize = 11.sp) },
                             icon = {
                                 if (selectedMode == ChartDisplayMode.QUIZZES) {
-                                    Icon(Icons.Default.Quiz, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Quiz, contentDescription = null, modifier = Modifier.size(15.dp))
                                 }
                             },
                             modifier = Modifier.testTag("mode_quizzes_btn")
                         )
                         SegmentedButton(
-                            shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                            shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4),
+                            onClick = { selectedMode = ChartDisplayMode.STUDENTS },
+                            selected = selectedMode == ChartDisplayMode.STUDENTS,
+                            label = { Text("Students", fontSize = 11.sp) },
+                            icon = {
+                                if (selectedMode == ChartDisplayMode.STUDENTS) {
+                                    Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(15.dp))
+                                }
+                            },
+                            modifier = Modifier.testTag("mode_students_btn")
+                        )
+                        SegmentedButton(
+                            shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4),
                             onClick = { selectedMode = ChartDisplayMode.DISTRIBUTION },
                             selected = selectedMode == ChartDisplayMode.DISTRIBUTION,
-                            label = { Text("Grades", fontSize = 12.sp) },
+                            label = { Text("Grades", fontSize = 11.sp) },
                             icon = {
                                 if (selectedMode == ChartDisplayMode.DISTRIBUTION) {
-                                    Icon(Icons.Default.PieChart, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.PieChart, contentDescription = null, modifier = Modifier.size(15.dp))
                                 }
                             },
                             modifier = Modifier.testTag("mode_grades_btn")
@@ -351,6 +428,7 @@ fun TeacherPerformanceDashboardTab(
             items(filteredStudents, key = { it.studentId }) { student ->
                 StudentPerformanceCard(
                     student = student,
+                    onClick = { selectedStudentForDetail = student },
                     onSendAlert = { onSendAlertToStudent(student) }
                 )
             }
@@ -369,6 +447,18 @@ fun TeacherPerformanceDashboardTab(
         items(analyticsOverview.quizSummaries, key = { it.quizSetId }) { quiz ->
             QuizSetPerformanceCard(quiz = quiz)
         }
+    }
+
+    // Student Progress Details Dialog
+    if (selectedStudentForDetail != null) {
+        StudentProgressDetailDialog(
+            student = selectedStudentForDetail!!,
+            onDismiss = { selectedStudentForDetail = null },
+            onSendAlert = {
+                onSendAlertToStudent(selectedStudentForDetail!!)
+                selectedStudentForDetail = null
+            }
+        )
     }
 }
 
@@ -391,6 +481,7 @@ private fun TierFilterChip(
 @Composable
 private fun StudentPerformanceCard(
     student: StudentPerformanceSummary,
+    onClick: () -> Unit = {},
     onSendAlert: () -> Unit
 ) {
     val tierColor = when {
@@ -403,6 +494,7 @@ private fun StudentPerformanceCard(
     BentoCard(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .testTag("student_perf_card_${student.studentId}"),
         cornerRadius = 16.dp,
         padding = 14.dp
@@ -523,6 +615,174 @@ private fun StudentPerformanceCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StudentProgressDetailDialog(
+    student: StudentPerformanceSummary,
+    onDismiss: () -> Unit,
+    onSendAlert: () -> Unit
+) {
+    val tierColor = when {
+        student.averageScore >= 90f -> BentoEmerald
+        student.averageScore >= 75f -> BentoPrimary
+        student.averageScore >= 60f -> BentoAmber
+        else -> Color(0xFFEF4444)
+    }
+
+    val meetsBenchmark = student.averageScore >= 75f
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(tierColor.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = student.studentName.take(1).uppercase(),
+                        fontWeight = FontWeight.Bold,
+                        color = tierColor,
+                        fontSize = 18.sp
+                    )
+                }
+                Column {
+                    Text(
+                        text = student.studentName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = student.studentEmail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Benchmark Status Pill
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (meetsBenchmark) BentoEmerald.copy(alpha = 0.12f) else BentoAmber.copy(alpha = 0.12f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (meetsBenchmark) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (meetsBenchmark) BentoEmerald else BentoAmber,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = if (meetsBenchmark) "Meeting 75% Mastery Benchmark" else "Below 75% Target • Additional Review Advised",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (meetsBenchmark) BentoEmerald else BentoAmber
+                        )
+                    }
+                }
+
+                // Metric Grid
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricBox(
+                        label = "Average",
+                        value = "${String.format("%.1f", student.averageScore)}%",
+                        color = tierColor,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricBox(
+                        label = "Highest",
+                        value = "${student.highestScore.toInt()}%",
+                        color = BentoPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricBox(
+                        label = "Pass Rate",
+                        value = "${student.passRate.toInt()}%",
+                        color = BentoEmerald,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricBox(
+                        label = "Quizzes",
+                        value = "${student.quizzesTaken}",
+                        color = BentoViolet,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onSendAlert,
+                colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary)
+            ) {
+                Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Send Alert")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun MetricBox(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
         }
     }
 }

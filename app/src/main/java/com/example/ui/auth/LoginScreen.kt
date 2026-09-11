@@ -29,9 +29,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.entities.UserEntity
 import com.example.data.model.UserRole
 import com.example.ui.QuizViewModel
 
@@ -41,8 +41,6 @@ fun LoginScreen(
     viewModel: QuizViewModel,
     onLoginSuccess: (UserRole) -> Unit
 ) {
-    val currentUser by viewModel.currentUser.collectAsState()
-    val allUsers by viewModel.allUsers.collectAsState()
     val isCloudConnected by viewModel.isCloudConnected.collectAsState()
     val isAuthLoading by viewModel.isAuthLoading.collectAsState()
     val authErrorMessage by viewModel.authErrorMessage.collectAsState()
@@ -52,17 +50,29 @@ fun LoginScreen(
 
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
+    var confirmPasswordInput by remember { mutableStateOf("") }
     var nameInput by remember { mutableStateOf("") }
+    var adminPasscodeInput by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
 
-    var showQuickSwitchDialog by remember { mutableStateOf(false) }
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var resetPasswordEmail by remember { mutableStateOf("") }
+    var resetPasswordStatus by remember { mutableStateOf<String?>(null) }
+    var isSendingReset by remember { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
 
-    val roleColor = when (selectedRole) {
-        UserRole.ADMIN -> Color(0xFFD32F2F)
-        UserRole.TEACHER -> Color(0xFF1976D2)
-        UserRole.STUDENT -> Color(0xFF388E3C)
+    val rolePrimaryColor = when (selectedRole) {
+        UserRole.STUDENT -> Color(0xFF2E7D32)
+        UserRole.TEACHER -> Color(0xFF1565C0)
+        UserRole.ADMIN -> Color(0xFFC62828)
+    }
+
+    val roleBgColor = when (selectedRole) {
+        UserRole.STUDENT -> Color(0xFFE8F5E9)
+        UserRole.TEACHER -> Color(0xFFE3F2FD)
+        UserRole.ADMIN -> Color(0xFFFFEBEE)
     }
 
     Surface(
@@ -72,20 +82,19 @@ fun LoginScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
+                .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // Brand Header Logo
+            // App Identity & Shield Icon
             Box(
                 modifier = Modifier
-                    .size(80.dp)
+                    .size(76.dp)
                     .clip(CircleShape)
                     .background(
-                        Brush.linearGradient(
+                        Brush.verticalGradient(
                             listOf(
                                 MaterialTheme.colorScheme.primary,
                                 MaterialTheme.colorScheme.tertiary
@@ -95,14 +104,14 @@ fun LoginScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.School,
-                    contentDescription = "App Logo",
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = "Secure Authentication",
                     tint = Color.White,
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier.size(40.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text(
                 text = "Quiz Platform",
@@ -112,21 +121,21 @@ fun LoginScreen(
             )
 
             Text(
-                text = "Secure Authentication for Admins, Teachers & Students",
+                text = "Secure Role-Based Portal",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                textAlign = TextAlign.Center
             )
 
-            // Cloud Firestore storage indicator badge
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Cloud Firestore Connectivity Badge
             Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = if (isCloudConnected) Color(0xFFE8F5E9) else Color(0xFFFFF3E0),
-                modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
+                shape = RoundedCornerShape(20.dp),
+                color = if (isCloudConnected) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -137,7 +146,7 @@ fun LoginScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isCloudConnected) "Stored & Synced in Firebase Firestore" else "Offline Cache Mode (Firebase Ready)",
+                        text = if (isCloudConnected) "Firebase Auth & Firestore Connected" else "Offline Cache Mode",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = if (isCloudConnected) Color(0xFF2E7D32) else Color(0xFFEF6C00)
@@ -145,221 +154,168 @@ fun LoginScreen(
                 }
             }
 
-            // Current Session Card if already active
-            currentUser?.let { user ->
-                Card(
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Auth Mode Toggle (Sign In vs Sign Up)
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                    )
+                        .padding(4.dp)
                 ) {
-                    Row(
+                    // Sign In Tab
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (!isSignUpMode) MaterialTheme.colorScheme.surface else Color.Transparent,
+                        shadowElevation = if (!isSignUpMode) 2.dp else 0.dp,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            .weight(1f)
+                            .clickable {
+                                isSignUpMode = false
+                                viewModel.clearAuthError()
+                            }
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when (user.role) {
-                                        UserRole.ADMIN -> Color(0xFFD32F2F)
-                                        UserRole.TEACHER -> Color(0xFF1976D2)
-                                        UserRole.STUDENT -> Color(0xFF388E3C)
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = user.name.take(1).uppercase(),
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp
-                            )
-                        }
+                        Text(
+                            text = "Sign In",
+                            fontWeight = if (!isSignUpMode) FontWeight.Bold else FontWeight.Medium,
+                            color = if (!isSignUpMode) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = user.name,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${user.email} • ${user.role.name}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        FilledTonalButton(
-                            onClick = { currentUser?.let { onLoginSuccess(it.role) } },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.testTag("continue_current_session_btn")
-                        ) {
-                            Text("Enter")
-                        }
+                    // Create Account Tab
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isSignUpMode) MaterialTheme.colorScheme.surface else Color.Transparent,
+                        shadowElevation = if (isSignUpMode) 2.dp else 0.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                isSignUpMode = true
+                                viewModel.clearAuthError()
+                            }
+                    ) {
+                        Text(
+                            text = "Create Account",
+                            fontWeight = if (isSignUpMode) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSignUpMode) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            style = MaterialTheme.typography.titleSmall
+                        )
                     }
                 }
             }
 
-            // Role Selector Chips
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Role Selection Cards (Clean, readable, zero overlap)
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Text(
-                        text = "Sign in as:",
+                        text = if (isSignUpMode) "Register as:" else "Select Your Access Role:",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        UserRole.entries.forEach { role ->
-                            val isSelected = selectedRole == role
-                            val chipColor = when (role) {
-                                UserRole.ADMIN -> Color(0xFFD32F2F)
-                                UserRole.TEACHER -> Color(0xFF1976D2)
-                                UserRole.STUDENT -> Color(0xFF388E3C)
-                            }
+                    UserRole.entries.forEach { role ->
+                        val isSelected = selectedRole == role
+                        val roleColor = when (role) {
+                            UserRole.STUDENT -> Color(0xFF2E7D32)
+                            UserRole.TEACHER -> Color(0xFF1565C0)
+                            UserRole.ADMIN -> Color(0xFFC62828)
+                        }
+                        val roleDesc = when (role) {
+                            UserRole.STUDENT -> "Take exams, view progress & compete on leaderboard"
+                            UserRole.TEACHER -> "Author quizzes, monitor submissions & generate with AI"
+                            UserRole.ADMIN -> "Governance console, system audits & security logs"
+                        }
+                        val roleIcon = when (role) {
+                            UserRole.STUDENT -> Icons.Default.School
+                            UserRole.TEACHER -> Icons.Default.SupervisedUserCircle
+                            UserRole.ADMIN -> Icons.Default.AdminPanelSettings
+                        }
 
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) roleColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, roleColor) else null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
                                     selectedRole = role
-                                    // Auto-populate convenient role template credentials for testing
-                                    if (!isSignUpMode && emailInput.isBlank()) {
-                                        emailInput = when (role) {
-                                            UserRole.ADMIN -> "admin@quiz.com"
-                                            UserRole.TEACHER -> "teacher@quiz.com"
-                                            UserRole.STUDENT -> "student@quiz.com"
-                                        }
-                                        passwordInput = "password123"
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        text = role.name,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = when (role) {
-                                            UserRole.ADMIN -> Icons.Default.AdminPanelSettings
-                                            UserRole.TEACHER -> Icons.Default.School
-                                            UserRole.STUDENT -> Icons.Default.Person
-                                        },
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = chipColor,
-                                    selectedLabelColor = Color.White,
-                                    selectedLeadingIconColor = Color.White
-                                ),
+                                    viewModel.clearAuthError()
+                                }
+                                .testTag("role_chip_${role.name.lowercase()}")
+                        ) {
+                            Row(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("role_chip_${role.name.lowercase()}")
-                            )
-                        }
-                    }
-                }
-            }
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isSelected) roleColor else MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = roleIcon,
+                                        contentDescription = role.name,
+                                        tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = when (role) {
+                                            UserRole.STUDENT -> "Student"
+                                            UserRole.TEACHER -> "Faculty / Teacher"
+                                            UserRole.ADMIN -> "Platform Administrator"
+                                        },
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (isSelected) roleColor else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = roleDesc,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
 
-            // Quick 1-Tap Sign-In Buttons per Role (Tests Firestore verification & conditional routing)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "1-Tap Direct Role Portal Access:",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Student Portal
-                        Button(
-                            onClick = {
-                                selectedRole = UserRole.STUDENT
-                                emailInput = "student@quiz.com"
-                                passwordInput = "password123"
-                                viewModel.quickSignInAsRole(UserRole.STUDENT, onLoginSuccess)
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF388E3C)),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("quick_login_student_btn"),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Student", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        // Teacher Dashboard
-                        Button(
-                            onClick = {
-                                selectedRole = UserRole.TEACHER
-                                emailInput = "teacher@quiz.com"
-                                passwordInput = "password123"
-                                viewModel.quickSignInAsRole(UserRole.TEACHER, onLoginSuccess)
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("quick_login_teacher_btn"),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Teacher", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        // Admin Console
-                        Button(
-                            onClick = {
-                                selectedRole = UserRole.ADMIN
-                                emailInput = "admin@quiz.com"
-                                passwordInput = "password123"
-                                viewModel.quickSignInAsRole(UserRole.ADMIN, onLoginSuccess)
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("quick_login_admin_btn"),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Admin", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = {
+                                        selectedRole = role
+                                        viewModel.clearAuthError()
+                                    },
+                                    colors = RadioButtonDefaults.colors(selectedColor = roleColor)
+                                )
+                            }
                         }
                     }
                 }
@@ -367,39 +323,40 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Auth Error Banner
+            // Error Message Banner
             authErrorMessage?.let { error ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 12.dp),
+                        .padding(bottom = 14.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            Icons.Default.ErrorOutline,
-                            contentDescription = null,
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = "Error",
                             tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = error,
                             color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
             }
 
-            // Input Fields Card
+            // Credential Form Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
@@ -408,12 +365,13 @@ fun LoginScreen(
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // Sign-up Full Name Input
+                    // Full Name (Only in Sign-Up mode)
                     AnimatedVisibility(visible = isSignUpMode) {
                         OutlinedTextField(
                             value = nameInput,
                             onValueChange = { nameInput = it },
                             label = { Text("Full Name") },
+                            placeholder = { Text("e.g. John Doe") },
                             leadingIcon = {
                                 Icon(Icons.Default.Badge, contentDescription = null)
                             },
@@ -432,12 +390,15 @@ fun LoginScreen(
                         )
                     }
 
-                    // Email Input
+                    // Email Address
                     OutlinedTextField(
                         value = emailInput,
-                        onValueChange = { emailInput = it },
+                        onValueChange = {
+                            emailInput = it
+                            if (authErrorMessage != null) viewModel.clearAuthError()
+                        },
                         label = { Text("Email Address") },
-                        placeholder = { Text("user@quiz.com") },
+                        placeholder = { Text("name@domain.com") },
                         leadingIcon = {
                             Icon(Icons.Default.Email, contentDescription = null)
                         },
@@ -455,11 +416,15 @@ fun LoginScreen(
                             .testTag("auth_email_input")
                     )
 
-                    // Password Input
+                    // Password
                     OutlinedTextField(
                         value = passwordInput,
-                        onValueChange = { passwordInput = it },
+                        onValueChange = {
+                            passwordInput = it
+                            if (authErrorMessage != null) viewModel.clearAuthError()
+                        },
                         label = { Text("Password") },
+                        placeholder = { Text("Minimum 6 characters") },
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null)
                         },
@@ -475,36 +440,104 @@ fun LoginScreen(
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Password,
-                            imeAction = ImeAction.Done
+                            imeAction = if (isSignUpMode) ImeAction.Next else ImeAction.Done
                         ),
                         keyboardActions = KeyboardActions(
-                            onDone = {
-                                focusManager.clearFocus()
-                                if (emailInput.isNotBlank() && passwordInput.isNotBlank()) {
-                                    if (isSignUpMode) {
-                                        viewModel.signUpWithFirebase(
-                                            email = emailInput.trim(),
-                                            password = passwordInput.trim(),
-                                            name = if (nameInput.isNotBlank()) nameInput.trim() else emailInput.substringBefore("@"),
-                                            role = selectedRole,
-                                            onSuccess = onLoginSuccess
-                                        )
-                                    } else {
-                                        viewModel.signInWithFirebase(
-                                            email = emailInput.trim(),
-                                            password = passwordInput.trim(),
-                                            role = selectedRole,
-                                            onSuccess = onLoginSuccess
-                                        )
-                                    }
-                                }
-                            }
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                            onDone = { focusManager.clearFocus() }
                         ),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("auth_password_input")
                     )
+
+                    // Confirm Password (Only in Sign-Up mode)
+                    AnimatedVisibility(visible = isSignUpMode) {
+                        OutlinedTextField(
+                            value = confirmPasswordInput,
+                            onValueChange = { confirmPasswordInput = it },
+                            label = { Text("Confirm Password") },
+                            placeholder = { Text("Re-enter password") },
+                            leadingIcon = {
+                                Icon(Icons.Default.LockReset, contentDescription = null)
+                            },
+                            trailingIcon = {
+                                IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                    Icon(
+                                        imageVector = if (confirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
+                                    )
+                                }
+                            },
+                            visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            singleLine = true,
+                            isError = confirmPasswordInput.isNotEmpty() && confirmPasswordInput != passwordInput,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Password,
+                                imeAction = if (selectedRole == UserRole.ADMIN) ImeAction.Next else ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                                onDone = { focusManager.clearFocus() }
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Admin Security Passcode (Only when creating an Admin account)
+                    AnimatedVisibility(visible = isSignUpMode && selectedRole == UserRole.ADMIN) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            OutlinedTextField(
+                                value = adminPasscodeInput,
+                                onValueChange = { adminPasscodeInput = it },
+                                label = { Text("Admin Passcode") },
+                                placeholder = { Text("Authorization code") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.VpnKey, contentDescription = null, tint = Color(0xFFC62828))
+                                },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Password,
+                                    imeAction = ImeAction.Done
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onDone = { focusManager.clearFocus() }
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = "Required to provision an Administrator account.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Forgot Password link (Sign In mode only)
+                    if (!isSignUpMode) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    resetPasswordEmail = emailInput
+                                    resetPasswordStatus = null
+                                    showForgotPasswordDialog = true
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Forgot Password?",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = rolePrimaryColor
+                                )
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(4.dp))
 
@@ -513,11 +546,16 @@ fun LoginScreen(
                         onClick = {
                             focusManager.clearFocus()
                             if (isSignUpMode) {
+                                if (confirmPasswordInput != passwordInput) {
+                                    // Handle mismatch locally
+                                    return@Button
+                                }
                                 viewModel.signUpWithFirebase(
                                     email = emailInput.trim(),
                                     password = passwordInput.trim(),
-                                    name = if (nameInput.isNotBlank()) nameInput.trim() else emailInput.substringBefore("@"),
+                                    name = nameInput.trim(),
                                     role = selectedRole,
+                                    adminPasscode = adminPasscodeInput.trim(),
                                     onSuccess = onLoginSuccess
                                 )
                             } else {
@@ -529,18 +567,19 @@ fun LoginScreen(
                                 )
                             }
                         },
-                        enabled = !isAuthLoading && emailInput.isNotBlank() && passwordInput.isNotBlank(),
+                        enabled = !isAuthLoading && emailInput.isNotBlank() && passwordInput.isNotBlank() &&
+                                (!isSignUpMode || (nameInput.isNotBlank() && confirmPasswordInput == passwordInput)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
                             .testTag("auth_submit_btn"),
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = roleColor)
+                        colors = ButtonDefaults.buttonColors(containerColor = rolePrimaryColor)
                     ) {
                         if (isAuthLoading) {
                             CircularProgressIndicator(
                                 color = Color.White,
-                                modifier = Modifier.size(24.dp),
+                                modifier = Modifier.size(22.dp),
                                 strokeWidth = 2.5.dp
                             )
                         } else {
@@ -551,21 +590,25 @@ fun LoginScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isSignUpMode) "Create ${selectedRole.name} Account" else "Sign In as ${selectedRole.name}",
+                                text = if (isSignUpMode) {
+                                    "Create ${selectedRole.name.lowercase().replaceFirstChar { it.uppercase() }} Account"
+                                } else {
+                                    "Sign In as ${selectedRole.name.lowercase().replaceFirstChar { it.uppercase() }}"
+                                },
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             )
                         }
                     }
 
-                    // Toggle between Login & Sign Up
+                    // Mode switch toggle
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (isSignUpMode) "Already have an account?" else "Don't have an account?",
+                            text = if (isSignUpMode) "Already registered?" else "New user?",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -577,133 +620,102 @@ fun LoginScreen(
                             modifier = Modifier.testTag("toggle_auth_mode_btn")
                         ) {
                             Text(
-                                text = if (isSignUpMode) "Sign In" else "Sign Up",
-                                fontWeight = FontWeight.Bold
+                                text = if (isSignUpMode) "Sign In here" else "Create an account",
+                                fontWeight = FontWeight.Bold,
+                                color = rolePrimaryColor
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Quick Account Switcher Button (Direct profile selection from Firestore/Room)
-            OutlinedButton(
-                onClick = { showQuickSwitchDialog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("quick_switch_profiles_btn"),
-                shape = RoundedCornerShape(14.dp)
+            // Security compliance footer
+            Row(
+                modifier = Modifier.padding(bottom = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Select Saved Profile (${allUsers.size} available)")
+                Icon(
+                    imageVector = Icons.Default.VerifiedUser,
+                    contentDescription = "Security Verified",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "End-to-End Firebase Auth & Cloud Firestore Security Rules",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
-    // Quick Switch Account Dialog
-    if (showQuickSwitchDialog) {
+    // Forgot Password Dialog
+    if (showForgotPasswordDialog) {
         AlertDialog(
-            onDismissRequest = { showQuickSwitchDialog = false },
+            onDismissRequest = { showForgotPasswordDialog = false },
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AccountCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Select Saved Account")
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.LockReset, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text("Reset Password", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             },
             text = {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Choose an existing user stored in Firebase / Local Cache:",
+                        text = "Enter your registered email address. We will send you instructions to securely reset your password.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    allUsers.forEach { user ->
-                        val isSelected = currentUser?.id == user.id
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    viewModel.switchActiveUser(user) { resolvedRole ->
-                                        showQuickSwitchDialog = false
-                                        onLoginSuccess(resolvedRole)
-                                    }
-                                },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            when (user.role) {
-                                                UserRole.ADMIN -> Color(0xFFD32F2F)
-                                                UserRole.TEACHER -> Color(0xFF1976D2)
-                                                UserRole.STUDENT -> Color(0xFF388E3C)
-                                            }
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = user.name.take(1).uppercase(),
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                    OutlinedTextField(
+                        value = resetPasswordEmail,
+                        onValueChange = { resetPasswordEmail = it },
+                        label = { Text("Account Email") },
+                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = user.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = user.email,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.surface
-                                ) {
-                                    Text(
-                                        text = user.role.name,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
+                    resetPasswordStatus?.let { status ->
+                        Text(
+                            text = status,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (status.contains("sent", ignoreCase = true)) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showQuickSwitchDialog = false }) {
-                    Text("Cancel")
+                Button(
+                    onClick = {
+                        isSendingReset = true
+                        viewModel.sendPasswordResetEmail(resetPasswordEmail) { success, msg ->
+                            isSendingReset = false
+                            resetPasswordStatus = msg
+                        }
+                    },
+                    enabled = !isSendingReset && resetPasswordEmail.isNotBlank(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    if (isSendingReset) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Send Reset Link")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showForgotPasswordDialog = false }) {
+                    Text("Close")
                 }
             }
         )

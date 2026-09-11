@@ -87,15 +87,21 @@ fun RechartsBarChartView(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.BarChart,
+                        imageVector = when (chartMode) {
+                            ChartDisplayMode.TRENDS -> Icons.Default.TrendingUp
+                            ChartDisplayMode.QUIZZES -> Icons.Default.Quiz
+                            ChartDisplayMode.STUDENTS -> Icons.Default.Person
+                            ChartDisplayMode.DISTRIBUTION -> Icons.Default.PieChart
+                        },
                         contentDescription = null,
                         tint = BentoPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
                         text = when (chartMode) {
-                            ChartDisplayMode.STUDENTS -> "Student Average Scores"
+                            ChartDisplayMode.TRENDS -> "Student Progress & Score Trends"
                             ChartDisplayMode.QUIZZES -> "Quiz Scores vs Pass Rates"
+                            ChartDisplayMode.STUDENTS -> "Student Average Scores"
                             ChartDisplayMode.DISTRIBUTION -> "Class Grade Distribution"
                         },
                         style = MaterialTheme.typography.titleMedium,
@@ -115,8 +121,9 @@ fun RechartsBarChartView(
 
             Text(
                 text = when (chartMode) {
-                    ChartDisplayMode.STUDENTS -> "Evaluated across ${overview.studentSummaries.size} active students (Target Benchmark: 75%)"
+                    ChartDisplayMode.TRENDS -> "Chronological performance trajectory across ${overview.progressTrends.size} milestones (Target: 75%)"
                     ChartDisplayMode.QUIZZES -> "Grouped bar chart comparing Class Avg vs Pass Rate across ${overview.quizSummaries.size} quiz sets"
+                    ChartDisplayMode.STUDENTS -> "Evaluated across ${overview.studentSummaries.size} active students (Target Benchmark: 75%)"
                     ChartDisplayMode.DISTRIBUTION -> "Distribution of all ${overview.totalAttemptsEvaluated} submitted quiz attempts"
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -199,6 +206,16 @@ fun RechartsBarChartView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 when (chartMode) {
+                    ChartDisplayMode.TRENDS -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            ChartLegendItem(color = Color(0xFF6366F1), label = "Avg Score (%)")
+                            ChartLegendItem(color = Color(0xFF10B981), label = "Pass Rate (%)", isDashed = true)
+                            ChartLegendItem(color = Color(0xFFF59E0B), label = "75% Target", isDashed = true)
+                        }
+                    }
                     ChartDisplayMode.STUDENTS -> {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -292,37 +309,21 @@ private fun generateRechartsHtml(
     val dataJsonArray = JSONArray()
 
     when (chartMode) {
-        ChartDisplayMode.STUDENTS -> {
-            val list = if (overview.studentSummaries.isNotEmpty()) {
-                overview.studentSummaries
-            } else {
-                listOf(
-                    com.example.data.model.StudentPerformanceSummary(
-                        studentId = "s1", studentName = "Aashish", studentEmail = "aashish@edu",
-                        quizzesTaken = 3, averageScore = 95f, highestScore = 100f, passRate = 100f, totalScore = 15
-                    ),
-                    com.example.data.model.StudentPerformanceSummary(
-                        studentId = "s2", studentName = "Sophia", studentEmail = "sophia@edu",
-                        quizzesTaken = 2, averageScore = 88f, highestScore = 92f, passRate = 100f, totalScore = 12
-                    ),
-                    com.example.data.model.StudentPerformanceSummary(
-                        studentId = "s3", studentName = "Marcus", studentEmail = "marcus@edu",
-                        quizzesTaken = 2, averageScore = 78f, highestScore = 85f, passRate = 100f, totalScore = 10
-                    ),
-                    com.example.data.model.StudentPerformanceSummary(
-                        studentId = "s4", studentName = "Elena", studentEmail = "elena@edu",
-                        quizzesTaken = 3, averageScore = 84f, highestScore = 90f, passRate = 100f, totalScore = 13
-                    ),
-                    com.example.data.model.StudentPerformanceSummary(
-                        studentId = "s5", studentName = "David", studentEmail = "david@edu",
-                        quizzesTaken = 1, averageScore = 65f, highestScore = 65f, passRate = 0f, totalScore = 5
-                    )
-                )
-            }
-
-            list.take(7).forEach { student ->
+        ChartDisplayMode.TRENDS -> {
+            overview.progressTrends.take(8).forEach { point ->
                 val obj = JSONObject()
-                // Take first name or short name for X-axis readability
+                obj.put("name", point.milestone)
+                obj.put("fullName", point.milestone)
+                obj.put("avgScore", String.format("%.1f", point.averageScore).toDoubleOrNull() ?: point.averageScore.toDouble())
+                obj.put("passRate", String.format("%.1f", point.passRate).toDoubleOrNull() ?: point.passRate.toDouble())
+                obj.put("attempts", point.attemptsCount)
+                dataJsonArray.put(obj)
+            }
+        }
+
+        ChartDisplayMode.STUDENTS -> {
+            overview.studentSummaries.take(7).forEach { student ->
+                val obj = JSONObject()
                 val shortName = student.studentName.split(" ").firstOrNull() ?: student.studentName
                 obj.put("name", shortName)
                 obj.put("fullName", student.studentName)
@@ -335,30 +336,7 @@ private fun generateRechartsHtml(
         }
 
         ChartDisplayMode.QUIZZES -> {
-            val list = if (overview.quizSummaries.isNotEmpty()) {
-                overview.quizSummaries
-            } else {
-                listOf(
-                    com.example.data.model.QuizPerformanceSummary(
-                        quizSetId = "q1", quizTitle = "Algorithms Mastery", categoryName = "CS",
-                        totalAttempts = 4, averageScore = 85f, passRate = 100f
-                    ),
-                    com.example.data.model.QuizPerformanceSummary(
-                        quizSetId = "q2", quizTitle = "Calculus I", categoryName = "Math",
-                        totalAttempts = 3, averageScore = 72f, passRate = 67f
-                    ),
-                    com.example.data.model.QuizPerformanceSummary(
-                        quizSetId = "q3", quizTitle = "Thermodynamics", categoryName = "Science",
-                        totalAttempts = 2, averageScore = 90f, passRate = 100f
-                    ),
-                    com.example.data.model.QuizPerformanceSummary(
-                        quizSetId = "q4", quizTitle = "World History", categoryName = "History",
-                        totalAttempts = 2, averageScore = 68f, passRate = 50f
-                    )
-                )
-            }
-
-            list.take(6).forEach { quiz ->
+            overview.quizSummaries.take(6).forEach { quiz ->
                 val obj = JSONObject()
                 val shortTitle = if (quiz.quizTitle.length > 12) quiz.quizTitle.take(11) + ".." else quiz.quizTitle
                 obj.put("name", shortTitle)
@@ -371,19 +349,7 @@ private fun generateRechartsHtml(
         }
 
         ChartDisplayMode.DISTRIBUTION -> {
-            val list = if (overview.gradeDistributions.isNotEmpty()) {
-                overview.gradeDistributions
-            } else {
-                listOf(
-                    com.example.data.model.GradeDistributionItem("A", "A (90-100%)", 4, 40f, "#10B981"),
-                    com.example.data.model.GradeDistributionItem("B", "B (80-89%)", 3, 30f, "#3B82F6"),
-                    com.example.data.model.GradeDistributionItem("C", "C (70-79%)", 2, 20f, "#F59E0B"),
-                    com.example.data.model.GradeDistributionItem("D", "D (60-69%)", 1, 10f, "#F97316"),
-                    com.example.data.model.GradeDistributionItem("F", "F (<60%)", 0, 0f, "#EF4444")
-                )
-            }
-
-            list.forEach { item ->
+            overview.gradeDistributions.forEach { item ->
                 val obj = JSONObject()
                 obj.put("name", item.grade)
                 obj.put("label", item.label)
@@ -493,11 +459,86 @@ private fun generateRechartsHtml(
       }
 
       const {
-        BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+        AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
         ResponsiveContainer, Cell, ReferenceLine
       } = window.Recharts;
 
       function App() {
+        if (!chartData || chartData.length === 0) {
+          return React.createElement('div', {
+            style: {
+              height: '280px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: axisStroke,
+              textAlign: 'center',
+              padding: '20px'
+            }
+          },
+            React.createElement('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '📈'),
+            React.createElement('div', { style: { fontWeight: '700', fontSize: '14px', color: isDark ? '#E2E8F0' : '#1E293B' } }, 'No Performance Data Yet'),
+            React.createElement('div', { style: { fontSize: '11px', marginTop: '4px', maxWidth: '240px', lineHeight: '1.5' } }, 'Quiz results and student progress trends will automatically graph here once attempts are recorded.')
+          );
+        }
+
+        if (chartMode === 'TRENDS') {
+          return React.createElement(ResponsiveContainer, { width: '100%', height: 280 },
+            React.createElement(AreaChart, {
+              data: chartData,
+              margin: { top: 18, right: 12, left: -20, bottom: 24 }
+            },
+              React.createElement('defs', null,
+                React.createElement('linearGradient', { id: 'scoreGradient', x1: '0', y1: '0', x2: '0', y2: '1' },
+                  React.createElement('stop', { offset: '5%', stopColor: '#6366F1', stopOpacity: 0.35 }),
+                  React.createElement('stop', { offset: '95%', stopColor: '#6366F1', stopOpacity: 0.0 })
+                )
+              ),
+              React.createElement(CartesianGrid, { strokeDasharray: '3 3', stroke: gridStroke, vertical: false }),
+              React.createElement(XAxis, {
+                dataKey: 'name',
+                stroke: axisStroke,
+                tick: { fontSize: 11, fill: axisStroke },
+                tickLine: false
+              }),
+              React.createElement(YAxis, {
+                domain: [0, 100],
+                stroke: axisStroke,
+                tick: { fontSize: 10, fill: axisStroke },
+                tickLine: false,
+                unit: '%'
+              }),
+              React.createElement(Tooltip, { content: React.createElement(CustomTooltip) }),
+              React.createElement(ReferenceLine, {
+                y: 75,
+                stroke: '#F59E0B',
+                strokeDasharray: '3 3',
+                label: { value: '75% Target', position: 'insideTopRight', fill: '#F59E0B', fontSize: 10 }
+              }),
+              React.createElement(Area, {
+                type: 'monotone',
+                dataKey: 'avgScore',
+                name: 'Avg Score (%)',
+                stroke: '#6366F1',
+                strokeWidth: 3,
+                fill: 'url(#scoreGradient)',
+                dot: { r: 4, fill: '#6366F1' },
+                activeDot: { r: 6 }
+              }),
+              React.createElement(Line, {
+                type: 'monotone',
+                dataKey: 'passRate',
+                name: 'Pass Rate (%)',
+                stroke: '#10B981',
+                strokeWidth: 2,
+                strokeDasharray: '4 2',
+                dot: { r: 3, fill: '#10B981' }
+              })
+            )
+          );
+        }
+
         let bars = null;
 
         if (chartMode === 'STUDENTS') {
@@ -619,6 +660,15 @@ private fun generateRechartsHtml(
       const plotW = width - padLeft - padRight;
       const plotH = height - padTop - padBottom;
 
+      if (!chartData || chartData.length === 0) {
+        let emptySvg = '<svg width="100%" height="280" viewBox="0 0 ' + width + ' ' + height + '" xmlns="http://www.w3.org/2000/svg">';
+        emptySvg += '<text x="' + (width / 2) + '" y="' + (height / 2 - 8) + '" fill="' + (isDark ? '#E2E8F0' : '#1E293B') + '" font-size="14" font-weight="bold" text-anchor="middle">No Performance Data Yet</text>';
+        emptySvg += '<text x="' + (width / 2) + '" y="' + (height / 2 + 14) + '" fill="' + axisStroke + '" font-size="11" text-anchor="middle">Student quiz results and trends will appear here.</text>';
+        emptySvg += '</svg>';
+        fallback.innerHTML = emptySvg;
+        return;
+      }
+
       let maxVal = 100;
       if (chartMode === 'DISTRIBUTION') {
         const maxC = Math.max(...chartData.map(d => d.count || 0));
@@ -636,46 +686,76 @@ private fun generateRechartsHtml(
         svg += '<text x="' + (padLeft - 6) + '" y="' + (y + 3) + '" fill="' + axisStroke + '" font-size="9" text-anchor="end">' + val + (chartMode === 'DISTRIBUTION' ? '' : '%') + '</text>';
       }
 
-      // Benchmark line for students
-      if (chartMode === 'STUDENTS') {
+      // Benchmark line for students or trends
+      if (chartMode === 'STUDENTS' || chartMode === 'TRENDS') {
         const benchY = padTop + plotH * (1 - 75 / 100);
-        svg += '<line x1="' + padLeft + '" y1="' + benchY + '" x2="' + (width - padRight) + '" y2="' + benchY + '" stroke="#10B981" stroke-width="1.5" stroke-dasharray="4,3" />';
-        svg += '<text x="' + (width - padRight - 4) + '" y="' + (benchY - 4) + '" fill="#10B981" font-size="9" font-weight="bold" text-anchor="end">75% Benchmark</text>';
+        svg += '<line x1="' + padLeft + '" y1="' + benchY + '" x2="' + (width - padRight) + '" y2="' + benchY + '" stroke="' + (chartMode === 'TRENDS' ? '#F59E0B' : '#10B981') + '" stroke-width="1.5" stroke-dasharray="4,3" />';
+        svg += '<text x="' + (width - padRight - 4) + '" y="' + (benchY - 4) + '" fill="' + (chartMode === 'TRENDS' ? '#F59E0B' : '#10B981') + '" font-size="9" font-weight="bold" text-anchor="end">75% Target</text>';
       }
 
-      // Bars
-      const n = chartData.length || 1;
-      const colW = plotW / n;
+      if (chartMode === 'TRENDS') {
+        const pts = chartData.map((d, idx) => {
+          const x = padLeft + idx * (plotW / Math.max(1, chartData.length - 1));
+          const y = padTop + plotH * (1 - (d.avgScore || 0) / 100);
+          return { x, y, d };
+        });
 
-      chartData.forEach((d, idx) => {
-        const xCenter = padLeft + idx * colW + colW / 2;
+        if (pts.length > 0) {
+          // Fill area
+          let areaPath = 'M ' + pts[0].x + ' ' + (padTop + plotH);
+          pts.forEach(p => { areaPath += ' L ' + p.x + ' ' + p.y; });
+          areaPath += ' L ' + pts[pts.length - 1].x + ' ' + (padTop + plotH) + ' Z';
+          svg += '<path d="' + areaPath + '" fill="rgba(99,102,241,0.18)" />';
 
-        if (chartMode === 'QUIZZES') {
-          const barW = Math.min(14, colW * 0.35);
-          // Bar 1: avgScore
-          const h1 = (d.avgScore / maxVal) * plotH;
-          const y1 = padTop + plotH - h1;
-          svg += '<rect x="' + (xCenter - barW - 2) + '" y="' + y1 + '" width="' + barW + '" height="' + h1 + '" fill="#6366F1" rx="4" />';
-          
-          // Bar 2: passRate
-          const h2 = (d.passRate / maxVal) * plotH;
-          const y2 = padTop + plotH - h2;
-          svg += '<rect x="' + (xCenter + 2) + '" y="' + y2 + '" width="' + barW + '" height="' + h2 + '" fill="#10B981" rx="4" />';
-        } else {
-          const val = chartMode === 'DISTRIBUTION' ? d.count : d.avgScore;
-          const barW = Math.min(26, colW * 0.58);
-          const barH = Math.max(4, (val / maxVal) * plotH);
-          const barY = padTop + plotH - barH;
-          const color = d.color || (val >= 75 ? '#6366F1' : (val >= 60 ? '#F59E0B' : '#EF4444'));
-          svg += '<rect x="' + (xCenter - barW / 2) + '" y="' + barY + '" width="' + barW + '" height="' + barH + '" fill="' + color + '" rx="5" />';
-          
-          // Value label on top
-          svg += '<text x="' + xCenter + '" y="' + (barY - 4) + '" fill="' + color + '" font-size="9" font-weight="bold" text-anchor="middle">' + val + (chartMode === 'DISTRIBUTION' ? '' : '%') + '</text>';
+          // Stroke line
+          let linePath = 'M ' + pts[0].x + ' ' + pts[0].y;
+          for (let i = 1; i < pts.length; i++) {
+            linePath += ' L ' + pts[i].x + ' ' + pts[i].y;
+          }
+          svg += '<path d="' + linePath + '" fill="none" stroke="#6366F1" stroke-width="3" stroke-linecap="round" />';
+
+          // Dots and text
+          pts.forEach(p => {
+            svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="4" fill="#6366F1" stroke="#FFFFFF" stroke-width="1.5" />';
+            svg += '<text x="' + p.x + '" y="' + (p.y - 8) + '" fill="#6366F1" font-size="9" font-weight="bold" text-anchor="middle">' + p.d.avgScore + '%</text>';
+            svg += '<text x="' + p.x + '" y="' + (height - 10) + '" fill="' + axisStroke + '" font-size="9" text-anchor="middle">' + p.d.name + '</text>';
+          });
         }
+      } else {
+        // Bars
+        const n = chartData.length || 1;
+        const colW = plotW / n;
 
-        // X-axis label
-        svg += '<text x="' + xCenter + '" y="' + (height - 10) + '" fill="' + axisStroke + '" font-size="10" text-anchor="middle">' + d.name + '</text>';
-      });
+        chartData.forEach((d, idx) => {
+          const xCenter = padLeft + idx * colW + colW / 2;
+
+          if (chartMode === 'QUIZZES') {
+            const barW = Math.min(14, colW * 0.35);
+            // Bar 1: avgScore
+            const h1 = (d.avgScore / maxVal) * plotH;
+            const y1 = padTop + plotH - h1;
+            svg += '<rect x="' + (xCenter - barW - 2) + '" y="' + y1 + '" width="' + barW + '" height="' + h1 + '" fill="#6366F1" rx="4" />';
+            
+            // Bar 2: passRate
+            const h2 = (d.passRate / maxVal) * plotH;
+            const y2 = padTop + plotH - h2;
+            svg += '<rect x="' + (xCenter + 2) + '" y="' + y2 + '" width="' + barW + '" height="' + h2 + '" fill="#10B981" rx="4" />';
+          } else {
+            const val = chartMode === 'DISTRIBUTION' ? d.count : d.avgScore;
+            const barW = Math.min(26, colW * 0.58);
+            const barH = Math.max(4, (val / maxVal) * plotH);
+            const barY = padTop + plotH - barH;
+            const color = d.color || (val >= 75 ? '#6366F1' : (val >= 60 ? '#F59E0B' : '#EF4444'));
+            svg += '<rect x="' + (xCenter - barW / 2) + '" y="' + barY + '" width="' + barW + '" height="' + barH + '" fill="' + color + '" rx="5" />';
+            
+            // Value label on top
+            svg += '<text x="' + xCenter + '" y="' + (barY - 4) + '" fill="' + color + '" font-size="9" font-weight="bold" text-anchor="middle">' + val + (chartMode === 'DISTRIBUTION' ? '' : '%') + '</text>';
+          }
+
+          // X-axis label
+          svg += '<text x="' + xCenter + '" y="' + (height - 10) + '" fill="' + axisStroke + '" font-size="10" text-anchor="middle">' + d.name + '</text>';
+        });
+      }
 
       svg += '</svg>';
       fallback.innerHTML = svg;

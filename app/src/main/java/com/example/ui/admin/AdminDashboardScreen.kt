@@ -182,36 +182,42 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
                 )
             }
 
-            when (selectedTab) {
-                0 -> BentoGridOverviewTab(
-                    metrics = platformMetrics,
-                    recentLogs = recentLogs,
-                    allCategories = allCategories,
-                    onNavigateToLogs = { selectedTab = 1 },
-                    onNavigateToUsers = { selectedTab = 2 },
-                    onNavigateToCategories = { selectedTab = 3 },
-                    onNavigateToApiConfig = { selectedTab = 4 },
-                    onAddCategory = { showAddCategoryDialog = true },
-                    onRunDiagnostic = { viewModel.triggerAdminDiagnosticLog() },
-                    onForceSync = { viewModel.forceSyncFirestore() }
-                )
-                1 -> FullSystemLogsTab(
-                    logs = recentLogs,
-                    onTriggerDiagnostic = { viewModel.triggerAdminDiagnosticLog() }
-                )
-                2 -> UserRosterTab(
-                    users = allUsers,
-                    onRoleChange = { userId, newRole ->
-                        viewModel.changeUserRole(userId, newRole)
-                    }
-                )
-                3 -> CategoryManagementTab(
-                    categories = allCategories,
-                    onDelete = { categoryId ->
-                        viewModel.deleteCategory(categoryId)
-                    }
-                )
-                4 -> GeminiAiAdminTab(viewModel = viewModel)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                when (selectedTab) {
+                    0 -> BentoGridOverviewTab(
+                        metrics = platformMetrics,
+                        recentLogs = recentLogs,
+                        allCategories = allCategories,
+                        onNavigateToLogs = { selectedTab = 1 },
+                        onNavigateToUsers = { selectedTab = 2 },
+                        onNavigateToCategories = { selectedTab = 3 },
+                        onNavigateToApiConfig = { selectedTab = 4 },
+                        onAddCategory = { showAddCategoryDialog = true },
+                        onRunDiagnostic = { viewModel.triggerAdminDiagnosticLog() },
+                        onForceSync = { viewModel.forceSyncFirestore() }
+                    )
+                    1 -> FullSystemLogsTab(
+                        logs = recentLogs,
+                        onTriggerDiagnostic = { viewModel.triggerAdminDiagnosticLog() }
+                    )
+                    2 -> UserRosterTab(
+                        users = allUsers,
+                        onRoleChange = { userId, newRole ->
+                            viewModel.changeUserRole(userId, newRole)
+                        }
+                    )
+                    3 -> CategoryManagementTab(
+                        categories = allCategories,
+                        onDelete = { categoryId ->
+                            viewModel.deleteCategory(categoryId)
+                        }
+                    )
+                    4 -> GeminiAiAdminTab(viewModel = viewModel)
+                }
             }
         }
     }

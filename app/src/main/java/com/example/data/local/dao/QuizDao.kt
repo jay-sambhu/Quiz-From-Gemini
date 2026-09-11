@@ -105,4 +105,23 @@ interface QuizDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertNotificationLog(log: NotificationLogEntity)
+
+    // --- Purge Seeded / Mock Test Content ---
+    @Query("DELETE FROM users WHERE id IN ('google_admin_001', 'google_teacher_001', 'google_student_001', 'google_student_002', 'google_student_003', 'user_admin_default', 'user_teacher_default', 'user_student_default')")
+    suspend fun purgeSeededUsers()
+
+    @Query("DELETE FROM quiz_sets WHERE id IN ('quiz_cs_01', 'quiz_math_01', 'quiz_sci_01', 'quiz_hist_01', 'quiz_prob_01')")
+    suspend fun purgeSeededQuizSets()
+
+    @Query("DELETE FROM questions WHERE quizSetId IN ('quiz_cs_01', 'quiz_math_01', 'quiz_sci_01', 'quiz_hist_01', 'quiz_prob_01') OR id LIKE 'q1_%' OR id LIKE 'q2_%' OR id LIKE 'q3_%' OR id LIKE 'q4_%' OR id LIKE 'q5_%'")
+    suspend fun purgeSeededQuestions()
+
+    @Query("DELETE FROM quiz_attempts WHERE id IN ('att_001', 'att_002', 'att_003', 'att_004', 'att_005', 'att_006')")
+    suspend fun purgeSeededAttempts()
+
+    @Query("DELETE FROM notification_logs WHERE id = 'notif_001'")
+    suspend fun purgeSeededNotificationLogs()
+
+    @Query("DELETE FROM categories WHERE id IN ('cat_cs', 'cat_math', 'cat_sci', 'cat_hist')")
+    suspend fun purgeSeededCategories()
 }

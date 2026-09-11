@@ -212,11 +212,12 @@ fun StudentDashboardScreen(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    TabRow(
+                    ScrollableTabRow(
                         selectedTabIndex = selectedDashboardTab,
                         containerColor = Color.Transparent,
                         divider = {},
-                        indicator = {}
+                        indicator = {},
+                        edgePadding = 4.dp
                     ) {
                         Tab(
                             selected = selectedDashboardTab == 0,
@@ -323,11 +324,36 @@ fun StudentDashboardScreen(
                                 selectedDashboardTab = 2
                             }
                         )
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            contentPadding = PaddingValues(end = 8.dp)
-                        ) {
-                            items(allCategories, key = { it.id }) { cat ->
+                        if (allCategories.isEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.MenuBook,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = "Curriculum subjects will appear here as teachers create and publish quizzes.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                contentPadding = PaddingValues(end = 8.dp)
+                            ) {
+                                items(allCategories, key = { it.id }) { cat ->
                                 val quizzesInCat = allQuizSets.filter { it.categoryId == cat.id }
                                 val icon = when {
                                     cat.name.contains("Math", ignoreCase = true) -> Icons.Default.Calculate
@@ -383,8 +409,9 @@ fun StudentDashboardScreen(
                         }
                     }
                 }
+            }
 
-                // 3. Top Students Leaderboard Component (Compact Bento Preview)
+            // 3. Top Students Leaderboard Component (Compact Bento Preview)
                 item {
                     TopStudentsLeaderboardComponent(
                         viewModel = viewModel,
