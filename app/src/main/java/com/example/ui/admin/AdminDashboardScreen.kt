@@ -1534,26 +1534,52 @@ fun UserRoleAdminCard(user: UserEntity, onRoleChange: (UserRole) -> Unit) {
                 Text(text = user.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            Box {
-                AssistChip(
-                    onClick = { expanded = true },
-                    label = { Text(user.role.name, fontWeight = FontWeight.Bold) },
-                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
-                    shape = RoundedCornerShape(10.dp)
-                )
-
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
+            if (user.role == UserRole.ADMIN) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = BentoRose.copy(alpha = 0.15f)
                 ) {
-                    UserRole.entries.forEach { role ->
-                        DropdownMenuItem(
-                            text = { Text(role.name) },
-                            onClick = {
-                                onRoleChange(role)
-                                expanded = false
-                            }
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Locked Role",
+                            tint = BentoRose,
+                            modifier = Modifier.size(14.dp)
                         )
+                        Text(
+                            text = "Sole Admin",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = BentoRose
+                        )
+                    }
+                }
+            } else {
+                Box {
+                    AssistChip(
+                        onClick = { expanded = true },
+                        label = { Text(user.role.name, fontWeight = FontWeight.Bold) },
+                        trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        listOf(UserRole.STUDENT, UserRole.TEACHER).forEach { role ->
+                            DropdownMenuItem(
+                                text = { Text(role.name) },
+                                onClick = {
+                                    onRoleChange(role)
+                                    expanded = false
+                                }
+                            )
+                        }
                     }
                 }
             }

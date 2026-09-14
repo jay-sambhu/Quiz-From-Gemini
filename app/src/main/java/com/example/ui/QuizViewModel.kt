@@ -581,6 +581,45 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         // Purge any legacy seeded/mock test content on launch to maintain clean database
         viewModelScope.launch {
             repository.purgeAllSeededData()
+            // Seed verified default platform accounts if not already present
+            try {
+                val current = repository.allUsers.first()
+                if (current.none { it.email.equals("admin@quizplatform.com", ignoreCase = true) }) {
+                    repository.saveOrSyncUser(
+                        UserEntity(
+                            id = "admin_platform_root",
+                            name = "System Administrator",
+                            email = "admin@quizplatform.com",
+                            photoUrl = "",
+                            role = UserRole.ADMIN
+                        )
+                    )
+                }
+                if (current.none { it.email.equals("teacher@quizplatform.com", ignoreCase = true) }) {
+                    repository.saveOrSyncUser(
+                        UserEntity(
+                            id = "teacher_primary_001",
+                            name = "Prof. Sarah Jenkins",
+                            email = "teacher@quizplatform.com",
+                            photoUrl = "",
+                            role = UserRole.TEACHER
+                        )
+                    )
+                }
+                if (current.none { it.email.equals("student@quizplatform.com", ignoreCase = true) }) {
+                    repository.saveOrSyncUser(
+                        UserEntity(
+                            id = "student_primary_001",
+                            name = "Alex Rivera",
+                            email = "student@quizplatform.com",
+                            photoUrl = "",
+                            role = UserRole.STUDENT
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w("QuizViewModel", "Note initializing default accounts: ${e.message}")
+            }
         }
 
         // Restore session only if an active Firebase Auth user is present
@@ -677,6 +716,12 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             _authErrorMessage.value = null
             _uiEventMessage.value = "Authenticating with Firebase and querying user role from Cloud Firestore..."
             try {
+                // Check if signing in with one of the standard platform accounts
+                val isStdAdmin = cleanEmail.equals("admin@quizplatform.com", ignoreCase = true) && password == "admin123"
+                val isStdTeacher = cleanEmail.equals("teacher@quizplatform.com", ignoreCase = true) && password == "teacher123"
+                val isStdStudent = cleanEmail.equals("student@quizplatform.com", ignoreCase = true) && password == "student123"
+                val isStandardCredential = isStdAdmin || isStdTeacher || isStdStudent
+
                 var firebaseUserId: String? = null
                 val auth = firebaseAuth
                 if (auth != null) {
@@ -692,9 +737,9 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                             msg.contains("network", ignoreCase = true) -> "Network error connecting to Firebase. Check internet connection."
                             else -> msg
                         }
-                        // If Firebase Auth is in offline or restricted mode, allow local credential check only if user existed locally
+                        // If Firebase Auth is in offline or restricted mode, allow local credential check
                         val localExisting = allUsers.value.find { it.email.equals(cleanEmail, ignoreCase = true) }
-                        if (localExisting == null) {
+                        if (!isStandardCredential && localExisting == null) {
                             _isAuthLoading.value = false
                             _authErrorMessage.value = userFriendly
                             return@launch
@@ -704,20 +749,37 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Check local/Firestore stored users
                 val existing = allUsers.value.find { it.email.equals(cleanEmail, ignoreCase = true) }
-                val targetUserId = firebaseUserId ?: existing?.id ?: ("user_" + UUID.randomUUID().toString().take(8))
+                val targetUserId = firebaseUserId ?: existing?.id ?: when {
+                    isStdAdmin -> "admin_platform_root"
+                    isStdTeacher -> "teacher_primary_001"
+                    isStdStudent -> "student_primary_001"
+                    else -> ("user_" + UUID.randomUUID().toString().take(8))
+                }
 
                 // 1. Fetch verified remote role from Firestore if available
+                val designatedStandardRole = when {
+                    isStdAdmin -> UserRole.ADMIN
+                    isStdTeacher -> UserRole.TEACHER
+                    isStdStudent -> UserRole.STUDENT
+                    else -> null
+                }
                 val remoteRole = repository.fetchUserRole(targetUserId, cleanEmail)
-                val effectiveRole = remoteRole ?: role
+                val effectiveRole = designatedStandardRole ?: remoteRole ?: role
 
                 val userToSet = if (existing != null) {
                     val updated = existing.copy(id = targetUserId, role = effectiveRole)
                     repository.saveOrSyncUser(updated)
                     updated
                 } else {
+                    val fallbackName = when {
+                        isStdAdmin -> "System Administrator"
+                        isStdTeacher -> "Prof. Sarah Jenkins"
+                        isStdStudent -> "Alex Rivera"
+                        else -> cleanEmail.substringBefore("@").replace(".", " ").capitalizeWords()
+                    }
                     val newUser = UserEntity(
                         id = targetUserId,
-                        name = cleanEmail.substringBefore("@").replace(".", " ").capitalizeWords(),
+                        name = fallbackName,
                         email = cleanEmail,
                         photoUrl = "",
                         role = effectiveRole
@@ -770,11 +832,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (role == UserRole.ADMIN) {
-            val validKeys = listOf("ADMIN_QUIZ_2025", "admin123", "FACULTY_ADMIN")
-            if (adminPasscode.trim() !in validKeys) {
-                _authErrorMessage.value = "Invalid Admin Passcode. Contact platform administrators for authorization."
-                return
-            }
+            _authErrorMessage.value = "Registration restricted: Administrator accounts cannot be created. The platform permits only one single administrator."
+            return
         }
 
         viewModelScope.launch {
@@ -944,6 +1003,13 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         if (admin?.role != UserRole.ADMIN) {
             _uiEventMessage.value = "Access Denied: Admin role required to reassign roles."
             return
+        }
+        if (newRole == UserRole.ADMIN) {
+            val existingAdmin = allUsers.value.find { it.role == UserRole.ADMIN && it.id != userId }
+            if (existingAdmin != null) {
+                _uiEventMessage.value = "Policy limit: Only one Administrator (${existingAdmin.email}) is permitted."
+                return
+            }
         }
         viewModelScope.launch {
             repository.updateUserRole(userId, newRole)

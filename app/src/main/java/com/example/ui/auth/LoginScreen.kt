@@ -199,6 +199,9 @@ fun LoginScreen(
                             .weight(1f)
                             .clickable {
                                 isSignUpMode = true
+                                if (selectedRole == UserRole.ADMIN) {
+                                    selectedRole = UserRole.STUDENT
+                                }
                                 viewModel.clearAuthError()
                             }
                     ) {
@@ -229,13 +232,45 @@ fun LoginScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = if (isSignUpMode) "Register as:" else "Select Your Access Role:",
+                        text = if (isSignUpMode) "Register as (Student or Teacher):" else "Select Your Access Role:",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    UserRole.entries.forEach { role ->
+                    if (isSignUpMode) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "New users can only create Student or Teacher accounts. Administrative access cannot be created and is reserved for the single system administrator.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+
+                    val availableRoles = if (isSignUpMode) {
+                        listOf(UserRole.STUDENT, UserRole.TEACHER)
+                    } else {
+                        UserRole.entries
+                    }
+
+                    availableRoles.forEach { role ->
                         val isSelected = selectedRole == role
                         val roleColor = when (role) {
                             UserRole.STUDENT -> Color(0xFF2E7D32)
@@ -476,45 +511,14 @@ fun LoginScreen(
                             isError = confirmPasswordInput.isNotEmpty() && confirmPasswordInput != passwordInput,
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Password,
-                                imeAction = if (selectedRole == UserRole.ADMIN) ImeAction.Next else ImeAction.Done
+                                imeAction = ImeAction.Done
                             ),
                             keyboardActions = KeyboardActions(
-                                onNext = { focusManager.moveFocus(FocusDirection.Down) },
                                 onDone = { focusManager.clearFocus() }
                             ),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
-                    }
-
-                    // Admin Security Passcode (Only when creating an Admin account)
-                    AnimatedVisibility(visible = isSignUpMode && selectedRole == UserRole.ADMIN) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            OutlinedTextField(
-                                value = adminPasscodeInput,
-                                onValueChange = { adminPasscodeInput = it },
-                                label = { Text("Admin Passcode") },
-                                placeholder = { Text("Authorization code") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.VpnKey, contentDescription = null, tint = Color(0xFFC62828))
-                                },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Password,
-                                    imeAction = ImeAction.Done
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onDone = { focusManager.clearFocus() }
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                text = "Required to provision an Administrator account.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
 
                     // Forgot Password link (Sign In mode only)
@@ -556,7 +560,7 @@ fun LoginScreen(
                                     password = passwordInput.trim(),
                                     name = nameInput.trim(),
                                     role = selectedRole,
-                                    adminPasscode = adminPasscodeInput.trim(),
+                                    adminPasscode = "",
                                     onSuccess = onLoginSuccess
                                 )
                             } else {
@@ -616,6 +620,9 @@ fun LoginScreen(
                         TextButton(
                             onClick = {
                                 isSignUpMode = !isSignUpMode
+                                if (isSignUpMode && selectedRole == UserRole.ADMIN) {
+                                    selectedRole = UserRole.STUDENT
+                                }
                                 viewModel.clearAuthError()
                             },
                             modifier = Modifier.testTag("toggle_auth_mode_btn")
@@ -625,6 +632,142 @@ fun LoginScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = rolePrimaryColor
                             )
+                        }
+                    }
+                }
+            }
+
+            // Quick Demo Credentials Card (Available on Sign In)
+            if (!isSignUpMode) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("demo_credentials_card"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VpnKey,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Platform Demo Credentials",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Text(
+                            text = "Tap to autofill login credentials. The system allows only one designated administrator.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        // 1. Sole Admin
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    emailInput = "admin@quizplatform.com"
+                                    passwordInput = "admin123"
+                                    selectedRole = UserRole.ADMIN
+                                    viewModel.clearAuthError()
+                                }
+                                .testTag("autofill_admin_btn")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Administrator (Sole Admin)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFC62828))
+                                    }
+                                    Text("admin@quizplatform.com  •  admin123", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text("Autofill", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                            }
+                        }
+
+                        // 2. Teacher
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    emailInput = "teacher@quizplatform.com"
+                                    passwordInput = "teacher123"
+                                    selectedRole = UserRole.TEACHER
+                                    viewModel.clearAuthError()
+                                }
+                                .testTag("autofill_teacher_btn")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Faculty / Teacher", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1565C0))
+                                    Text("teacher@quizplatform.com  •  teacher123", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text("Autofill", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1565C0))
+                            }
+                        }
+
+                        // 3. Student
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    emailInput = "student@quizplatform.com"
+                                    passwordInput = "student123"
+                                    selectedRole = UserRole.STUDENT
+                                    viewModel.clearAuthError()
+                                }
+                                .testTag("autofill_student_btn")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Student", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF2E7D32))
+                                    Text("student@quizplatform.com  •  student123", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text("Autofill", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                            }
                         }
                     }
                 }

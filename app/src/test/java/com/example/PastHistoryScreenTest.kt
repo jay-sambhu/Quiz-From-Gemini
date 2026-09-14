@@ -113,4 +113,40 @@ class PastHistoryScreenTest {
         assertEquals("att_1", sortedOldest.first().id)
         assertEquals("att_2", sortedOldest.last().id)
     }
+
+    @Test
+    fun testScoreImprovementTrajectoryCalculation() {
+        val studentAttempts = sampleAttempts.filter { it.studentId == studentId }
+        val chronological = studentAttempts.sortedBy { it.completedAt }
+
+        val first = chronological.first()
+        val latest = chronological.last()
+        val delta = latest.percentage - first.percentage
+
+        assertEquals(90f, first.percentage, 0.01f)
+        assertEquals(50f, latest.percentage, 0.01f)
+        assertEquals(-40f, delta, 0.01f)
+
+        val highestScore = chronological.maxOf { it.percentage }
+        val averageScore = chronological.map { it.percentage }.average()
+
+        assertEquals(90f, highestScore, 0.01f)
+        assertEquals(70.0, averageScore, 0.01)
+    }
+
+    @Test
+    fun testPositiveScoreImprovementTrajectory() {
+        val progressiveAttempts = listOf(
+            QuizAttemptEntity("a1", "q1", "Quiz 1", "Math", "s1", "Alex", "a@t.com", "{}", 6, 10, 60f, 100, 1000L),
+            QuizAttemptEntity("a2", "q2", "Quiz 2", "Math", "s1", "Alex", "a@t.com", "{}", 8, 10, 80f, 100, 2000L),
+            QuizAttemptEntity("a3", "q3", "Quiz 3", "Math", "s1", "Alex", "a@t.com", "{}", 10, 10, 100f, 100, 3000L)
+        )
+
+        val chronological = progressiveAttempts.sortedBy { it.completedAt }
+        val delta = chronological.last().percentage - chronological.first().percentage
+
+        assertEquals(40f, delta, 0.01f)
+        assertTrue(delta > 0)
+        assertEquals(100f, chronological.maxOf { it.percentage }, 0.01f)
+    }
 }

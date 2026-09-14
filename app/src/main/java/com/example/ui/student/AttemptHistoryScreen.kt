@@ -40,6 +40,7 @@ import com.example.data.local.entities.QuizAttemptEntity
 import com.example.data.local.entities.QuizSetEntity
 import com.example.ui.QuizViewModel
 import com.example.ui.components.*
+import com.example.ui.student.components.StudentScoreImprovementChart
 import com.example.ui.theme.*
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -335,6 +336,16 @@ fun AttemptHistoryScreen(
                         failedCount = failedCount,
                         totalTimeSeconds = totalTimeSeconds
                     )
+                }
+
+                // 2b. Score Improvement Trajectory Line Chart (Recharts / Native Compose)
+                if (studentAttempts.isNotEmpty()) {
+                    item {
+                        StudentScoreImprovementChart(
+                            attempts = studentAttempts,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                    }
                 }
 
                 // 3. Search & Filter Bar

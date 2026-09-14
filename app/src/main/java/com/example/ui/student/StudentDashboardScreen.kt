@@ -28,6 +28,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -143,6 +144,21 @@ fun StudentDashboardScreen(
         filteredUpcomingQuizzes.filter { it.id !in attemptedQuizIds }
     }
 
+    // Realtime search matches across available quizzes (searching by title or category)
+    val matchingSearchQuizzes = remember(allQuizSets, searchQuery, attemptedQuizIds) {
+        if (searchQuery.isBlank()) {
+            emptyList()
+        } else {
+            val query = searchQuery.trim().lowercase()
+            allQuizSets.filter { quiz ->
+                quiz.title.lowercase().contains(query) ||
+                quiz.categoryName.lowercase().contains(query) ||
+                quiz.description.lowercase().contains(query) ||
+                quiz.getTagList().any { it.lowercase().contains(query) }
+            }.sortedBy { it.id in attemptedQuizIds }
+        }
+    }
+
     Scaffold(
         modifier = Modifier.testTag("student_dashboard_screen"),
         topBar = {
@@ -232,8 +248,121 @@ fun StudentDashboardScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)
         ) {
-            // Dashboard Navigation Tabs (Overview | Top Students | Upcoming Quizzes | Recent Scores)
+            // 0. Universal Search Bar on Student Dashboard (Search Quizzes by Title or Category)
             item {
+                StudentDashboardSearchBar(
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { searchQuery = it },
+                    onClearSearch = { searchQuery = "" }
+                )
+            }
+
+            // If user is searching, display immediate search results
+            if (searchQuery.isNotBlank()) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("search_results_container"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Search Results (${matchingSearchQuizzes.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.testTag("search_results_count_text")
+                            )
+                            BentoPillTag(
+                                text = "\"$searchQuery\"",
+                                containerColor = BentoPrimary.copy(alpha = 0.12f),
+                                contentColor = BentoPrimary
+                            )
+                        }
+                        TextButton(
+                            onClick = { searchQuery = "" },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.testTag("student_dashboard_search_clear_btn")
+                        ) {
+                            Text("Clear", fontSize = 12.sp, color = BentoRose, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                if (matchingSearchQuizzes.isEmpty()) {
+                    item {
+                        BentoCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("search_empty_state"),
+                            cornerRadius = 16.dp
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 28.dp, horizontal = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(CircleShape)
+                                        .background(BentoViolet.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.SearchOff,
+                                        contentDescription = null,
+                                        tint = BentoViolet,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "No Quizzes Found",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "No available quizzes match \"$searchQuery\" in title or category.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(14.dp))
+                                OutlinedButton(
+                                    onClick = { searchQuery = "" },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Clear Search Query")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(matchingSearchQuizzes, key = { "search_${it.id}" }) { quizSet ->
+                        val isAttempted = quizSet.id in attemptedQuizIds
+                        StudentUpcomingQuizCard(
+                            quizSet = quizSet,
+                            isAttempted = isAttempted,
+                            onStart = { onStartQuiz(quizSet) },
+                            onTagClick = { clickedTag ->
+                                selectedTag = clickedTag
+                                selectedDashboardTab = 2
+                                searchQuery = ""
+                            },
+                            modifier = Modifier.testTag("search_result_quiz_card_${quizSet.id}")
+                        )
+                    }
+                }
+            } else {
+                // Dashboard Navigation Tabs (Overview | Top Students | Upcoming Quizzes | Recent Scores)
+                item {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -526,34 +655,12 @@ fun StudentDashboardScreen(
             // TAB 2: UPCOMING QUIZZES (Study Material, Subject & Tag Filter)
             // -------------------------------------------------------------
             if (selectedDashboardTab == 2) {
-                // Realtime Search Bar for study material
+                // Section Title for study material
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        BentoSectionTitle(
-                            title = "Study Material & Assessments",
-                            subtitle = "Explore quizzes organized by subject and curriculum tags"
-                        )
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = { Text("Search topics, tags, or concepts...", fontSize = 13.sp) },
-                            leadingIcon = {
-                                Icon(Icons.Default.Search, contentDescription = "Search", tint = BentoPrimary)
-                            },
-                            trailingIcon = {
-                                if (searchQuery.isNotBlank()) {
-                                    IconButton(onClick = { searchQuery = "" }) {
-                                        Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(18.dp))
-                                    }
-                                }
-                            },
-                            singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("quiz_search_input")
-                        )
-                    }
+                    BentoSectionTitle(
+                        title = "Study Material & Assessments",
+                        subtitle = "Explore quizzes organized by subject and curriculum tags"
+                    )
                 }
 
                 // Category Filter Pills (Subject Domains)
@@ -895,8 +1002,64 @@ fun StudentDashboardScreen(
                     }
                 }
             }
+            }
         }
     }
+}
+
+// -------------------------------------------------------------
+// STUDENT DASHBOARD SEARCH BAR (Search quizzes by title or category)
+// -------------------------------------------------------------
+@Composable
+fun StudentDashboardSearchBar(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onClearSearch: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = searchQuery,
+        onValueChange = onSearchQueryChange,
+        placeholder = {
+            Text(
+                text = "Search quizzes by title or category...",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+            )
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Search Quizzes",
+                tint = BentoPrimary
+            )
+        },
+        trailingIcon = {
+            if (searchQuery.isNotBlank()) {
+                IconButton(
+                    onClick = onClearSearch,
+                    modifier = Modifier.testTag("student_dashboard_search_clear_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Clear Search",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(16.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = BentoPrimary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        ),
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("student_dashboard_search_bar")
+    )
 }
 
 // -------------------------------------------------------------
@@ -1118,10 +1281,11 @@ fun StudentUpcomingQuizCard(
     quizSet: QuizSetEntity,
     isAttempted: Boolean,
     onStart: () -> Unit,
-    onTagClick: ((String) -> Unit)? = null
+    onTagClick: ((String) -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     BentoCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         cornerRadius = 20.dp
     ) {
         // Category and Status Badges
