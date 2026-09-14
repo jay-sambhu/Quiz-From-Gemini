@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -55,6 +56,8 @@ fun UserSettingsScreen(
     val allCategories by viewModel.allCategories.collectAsState()
     val uiEventMessage by viewModel.uiEventMessage.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
+    val isSyncingFirestore by viewModel.isSyncingFirestore.collectAsState()
+    val isUpdatingProfilePhoto by viewModel.isUpdatingProfilePhoto.collectAsState()
 
     var preferredSubject by remember(currentUser) { mutableStateOf(currentUser?.preferredSubject ?: "All") }
     var emailNotifsEnabled by remember(currentUser) { mutableStateOf(currentUser?.emailNotificationsEnabled ?: true) }
@@ -350,9 +353,18 @@ fun UserSettingsScreen(
                                                     viewModel.updateUserProfilePhoto("")
                                                     Toast.makeText(context, "Photo removed from Firestore profile", Toast.LENGTH_SHORT).show()
                                                 },
+                                                enabled = !isUpdatingProfilePhoto,
                                                 modifier = Modifier.size(28.dp)
                                             ) {
-                                                Icon(Icons.Default.DeleteOutline, contentDescription = "Remove photo", tint = BentoRose, modifier = Modifier.size(16.dp))
+                                                if (isUpdatingProfilePhoto) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(14.dp),
+                                                        strokeWidth = 1.5.dp,
+                                                        color = BentoRose
+                                                    )
+                                                } else {
+                                                    Icon(Icons.Default.DeleteOutline, contentDescription = "Remove photo", tint = BentoRose, modifier = Modifier.size(16.dp))
+                                                }
                                             }
                                         }
                                     }
@@ -372,12 +384,23 @@ fun UserSettingsScreen(
 
                                     Spacer(modifier = Modifier.height(4.dp))
 
-                                    Text(
-                                        text = "✓ Document collection: 'users/${user.id}' (field: photoUrl)",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = BentoEmerald,
-                                        fontSize = 10.sp
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = BentoEmerald,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = "Document collection: 'users/${user.id}' (field: photoUrl)",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = BentoEmerald,
+                                            fontSize = 10.sp
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -623,15 +646,26 @@ fun UserSettingsScreen(
 
                     Button(
                         onClick = { viewModel.syncWithFirestoreCloud() },
+                        enabled = !isSyncingFirestore,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("sync_firestore_cloud_btn"),
                         colors = ButtonDefaults.buttonColors(containerColor = BentoCyan, contentColor = Color.White),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sync Local Database with Firestore Cloud", fontWeight = FontWeight.Bold)
+                        if (isSyncingFirestore) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Syncing with Cloud Firestore...", fontWeight = FontWeight.Bold)
+                        } else {
+                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Sync Local Database with Firestore Cloud", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -650,7 +684,7 @@ fun UserSettingsScreen(
                     .testTag("switch_google_account_btn"),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.Logout, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Sign Out / Switch Account", fontWeight = FontWeight.Bold)
             }

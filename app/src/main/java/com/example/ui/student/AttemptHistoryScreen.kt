@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.FactCheck
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -55,6 +59,30 @@ import java.util.Locale
  * - Comprehensive explanations and learning takeaways
  * - Direct option to retake quizzes for mastery
  */
+/**
+ * Past History Screen for Students.
+ *
+ * Retrieves completed quizzes and scores from Cloud Firestore (quiz_attempts collection)
+ * and displays them in a chronological list with comprehensive performance analytics:
+ * - Direct retrieval & live synchronization with Firestore
+ * - Chronological list ordering (Newest & Oldest first)
+ * - Clear score breakdowns (Score, Total Questions, Percentage, Pass/Fail)
+ * - Question-by-question evaluations and learning takeaways
+ * - Direct option to retake quizzes for mastery
+ */
+@Composable
+fun PastHistoryScreen(
+    viewModel: QuizViewModel,
+    onBack: () -> Unit,
+    onRetakeQuiz: ((QuizSetEntity) -> Unit)? = null
+) {
+    AttemptHistoryScreen(
+        viewModel = viewModel,
+        onBack = onBack,
+        onRetakeQuiz = onRetakeQuiz
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AttemptHistoryScreen(
@@ -65,6 +93,16 @@ fun AttemptHistoryScreen(
     val currentUser by viewModel.currentUser.collectAsState()
     val allAttempts by viewModel.allAttempts.collectAsState()
     val allQuizSets by viewModel.allQuizSets.collectAsState()
+    val isFetchingFirestoreHistory by viewModel.isFetchingFirestoreHistory.collectAsState()
+    val firestoreHistoryLastSynced by viewModel.firestoreHistoryLastSynced.collectAsState()
+    val isCloudConnected by viewModel.isCloudConnected.collectAsState()
+
+    // Retrieve latest completed quizzes and scores directly from Cloud Firestore upon opening screen
+    LaunchedEffect(currentUser?.id) {
+        if (currentUser != null) {
+            viewModel.refreshStudentPastHistoryFromFirestore()
+        }
+    }
 
     // Map quiz sets by id for fast difficulty and metadata lookup
     val quizSetMap = remember(allQuizSets) {
@@ -158,17 +196,18 @@ fun AttemptHistoryScreen(
     val totalTimeSeconds = remember(studentAttempts) { studentAttempts.sumOf { it.timeSpentSeconds } }
 
     Scaffold(
+        modifier = Modifier.testTag("past_history_screen"),
         topBar = {
             TopAppBar(
                 title = {
                     Column {
                         Text(
-                            text = "Past Quiz History",
+                            text = "Past History",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleLarge
                         )
                         Text(
-                            text = "Review scores & detailed answers",
+                            text = "Completed Quizzes & Scores from Firestore",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -186,6 +225,27 @@ fun AttemptHistoryScreen(
                     }
                 },
                 actions = {
+                    // Manual Firestore Refresh Action
+                    IconButton(
+                        onClick = { viewModel.refreshStudentPastHistoryFromFirestore() },
+                        enabled = !isFetchingFirestoreHistory,
+                        modifier = Modifier.testTag("past_history_sync_btn")
+                    ) {
+                        if (isFetchingFirestoreHistory) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = BentoPrimary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh from Firestore",
+                                tint = BentoPrimary
+                            )
+                        }
+                    }
+
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = BentoPrimary.copy(alpha = 0.12f),
@@ -196,14 +256,14 @@ fun AttemptHistoryScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.FactCheck,
+                                imageVector = Icons.AutoMirrored.Filled.FactCheck,
                                 contentDescription = null,
                                 tint = BentoPrimary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "${studentAttempts.size} Taken",
+                                text = "${studentAttempts.size} Completed",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = BentoPrimary
@@ -215,20 +275,36 @@ fun AttemptHistoryScreen(
         }
     ) { innerPadding ->
         if (studentAttempts.isEmpty()) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                NoQuizResultsEmptyState(
-                    isCard = true,
-                    customTitle = "No Quiz History Yet",
-                    customDescription = "You haven't completed any quizzes yet. Take a quiz to test your knowledge, earn points, and unlock full question-by-question answer breakdowns.",
-                    onTakeQuiz = onBack,
-                    testTag = "attempt_history_empty_state"
+                // Firestore status banner even when empty
+                PastHistoryFirestoreStatusBar(
+                    isSyncing = isFetchingFirestoreHistory,
+                    isCloudConnected = isCloudConnected,
+                    lastSyncedTime = firestoreHistoryLastSynced,
+                    totalRecords = studentAttempts.size,
+                    onSyncNow = { viewModel.refreshStudentPastHistoryFromFirestore() }
                 )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    NoQuizResultsEmptyState(
+                        isCard = true,
+                        customTitle = "No Quiz History Found",
+                        customDescription = "No completed quiz attempts found in Firestore for your account. Complete a quiz to see your scores and full answers in this chronological list.",
+                        onTakeQuiz = onBack,
+                        testTag = "attempt_history_empty_state"
+                    )
+                }
             }
         } else {
             LazyColumn(
@@ -239,7 +315,18 @@ fun AttemptHistoryScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp)
             ) {
-                // 1. High-Level Performance Metrics Header
+                // 1. Cloud Firestore Sync Status Banner
+                item {
+                    PastHistoryFirestoreStatusBar(
+                        isSyncing = isFetchingFirestoreHistory,
+                        isCloudConnected = isCloudConnected,
+                        lastSyncedTime = firestoreHistoryLastSynced,
+                        totalRecords = studentAttempts.size,
+                        onSyncNow = { viewModel.refreshStudentPastHistoryFromFirestore() }
+                    )
+                }
+
+                // 2. High-Level Performance Metrics Header
                 item {
                     PastHistoryMetricsHeader(
                         totalAttempts = studentAttempts.size,
@@ -250,7 +337,7 @@ fun AttemptHistoryScreen(
                     )
                 }
 
-                // 2. Search & Filter Bar
+                // 3. Search & Filter Bar
                 item {
                     PastHistoryFilterSection(
                         searchQuery = searchQuery,
@@ -273,18 +360,31 @@ fun AttemptHistoryScreen(
                     )
                 }
 
-                // 3. Section Title & Results Count
+                // 4. Chronological Section Title & Results Count
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Completed Quizzes (${filteredAttempts.size})",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column {
+                            Text(
+                                text = "Chronological Quiz History (${filteredAttempts.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = when (selectedSortOrder) {
+                                    SortOrder.NEWEST -> "Sorted newest to oldest"
+                                    SortOrder.OLDEST -> "Sorted oldest to newest"
+                                    SortOrder.HIGHEST_SCORE -> "Sorted by highest score"
+                                    SortOrder.LOWEST_SCORE -> "Sorted by lowest score"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
                         if (filteredAttempts.size != studentAttempts.size) {
                             TextButton(
                                 onClick = {
@@ -300,7 +400,7 @@ fun AttemptHistoryScreen(
                     }
                 }
 
-                // 4. Empty search results if filtered list is empty
+                // 5. Empty search results if filtered list is empty
                 if (filteredAttempts.isEmpty()) {
                     item {
                         BentoCard(
@@ -348,14 +448,15 @@ fun AttemptHistoryScreen(
                         }
                     }
                 } else {
-                    // 5. Attempt Items with Detailed Answer Breakdown
-                    items(filteredAttempts, key = { it.id }) { attempt ->
+                    // 6. Chronological List Items with Detailed Answer Breakdown
+                    itemsIndexed(filteredAttempts, key = { _, it -> it.id }) { index, attempt ->
                         val targetQuiz = allQuizSets.find { it.id == attempt.quizSetId }
                         PastHistoryAttemptCard(
                             attempt = attempt,
                             viewModel = viewModel,
                             targetQuiz = targetQuiz,
-                            onRetakeQuiz = onRetakeQuiz
+                            onRetakeQuiz = onRetakeQuiz,
+                            chronologicalIndex = if (selectedSortOrder == SortOrder.NEWEST) (filteredAttempts.size - index) else (index + 1)
                         )
                     }
                 }
@@ -369,6 +470,120 @@ enum class SortOrder {
     OLDEST,
     HIGHEST_SCORE,
     LOWEST_SCORE
+}
+
+/**
+ * Cloud Firestore sync & retrieval status bar for student past history
+ */
+@Composable
+fun PastHistoryFirestoreStatusBar(
+    isSyncing: Boolean,
+    isCloudConnected: Boolean,
+    lastSyncedTime: Long,
+    totalRecords: Int,
+    onSyncNow: () -> Unit
+) {
+    BentoCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("past_history_firestore_status"),
+        backgroundColor = if (isCloudConnected) BentoPrimary.copy(alpha = 0.05f) else BentoAmber.copy(alpha = 0.06f),
+        borderColor = if (isCloudConnected) BentoPrimary.copy(alpha = 0.2f) else BentoAmber.copy(alpha = 0.25f),
+        cornerRadius = 16.dp
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(if (isCloudConnected) BentoEmerald.copy(alpha = 0.15f) else BentoAmber.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isSyncing) Icons.Default.Sync else if (isCloudConnected) Icons.Default.CloudDone else Icons.Default.CloudOff,
+                        contentDescription = "Cloud Firestore",
+                        tint = if (isCloudConnected) BentoEmerald else BentoAmber,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Cloud Firestore: quiz_attempts",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isCloudConnected) BentoEmerald.copy(alpha = 0.15f) else BentoAmber.copy(alpha = 0.15f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (isCloudConnected) "Live" else "Cached",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isCloudConnected) BentoEmerald else BentoAmber,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (isSyncing) {
+                            "Retrieving completed quizzes & scores..."
+                        } else if (lastSyncedTime > 0L) {
+                            val timeStr = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(lastSyncedTime))
+                            "$totalRecords completed quizzes synced • Refreshed $timeStr"
+                        } else {
+                            "$totalRecords completed quizzes retrieved from Firestore"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            OutlinedButton(
+                onClick = onSyncNow,
+                enabled = !isSyncing,
+                modifier = Modifier
+                    .height(36.dp)
+                    .testTag("past_history_sync_now_btn"),
+                contentPadding = PaddingValues(horizontal = 10.dp),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                if (isSyncing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = BentoPrimary
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Syncing", fontSize = 11.sp)
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Sync", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -596,7 +811,7 @@ fun PastHistoryFilterSection(
                     modifier = Modifier.size(54.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Sort,
+                        imageVector = Icons.AutoMirrored.Filled.Sort,
                         contentDescription = "Sort past quizzes"
                     )
                 }
@@ -861,7 +1076,8 @@ fun PastHistoryAttemptCard(
     attempt: QuizAttemptEntity,
     viewModel: QuizViewModel,
     targetQuiz: QuizSetEntity?,
-    onRetakeQuiz: ((QuizSetEntity) -> Unit)?
+    onRetakeQuiz: ((QuizSetEntity) -> Unit)?,
+    chronologicalIndex: Int? = null
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     var questionsList by remember { mutableStateOf<List<QuestionEntity>>(emptyList()) }
@@ -931,7 +1147,7 @@ fun PastHistoryAttemptCard(
         borderColor = if (isPassed) BentoEmerald.copy(alpha = 0.35f) else BentoRose.copy(alpha = 0.35f)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Header Row: Category Badge, Difficulty Badge & Completed Date
+            // Header Row: Category Badge, Difficulty Badge, Chronological Index & Completed Date
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -941,6 +1157,15 @@ fun PastHistoryAttemptCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (chronologicalIndex != null) {
+                        BentoPillTag(
+                            text = "#$chronologicalIndex",
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            icon = Icons.Default.Tag
+                        )
+                    }
+
                     if (attempt.categoryName.isNotBlank()) {
                         BentoPillTag(
                             text = attempt.categoryName,
@@ -971,16 +1196,32 @@ fun PastHistoryAttemptCard(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Default.AccessTime,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
+                        Icons.Default.CloudDone,
+                        contentDescription = "Firestore Verified",
+                        modifier = Modifier.size(13.dp),
+                        tint = BentoEmerald
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = "Firestore",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = BentoEmerald,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        Icons.Default.Event,
+                        contentDescription = "Completion Date",
+                        modifier = Modifier.size(13.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = formattedDate,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("past_history_date_${attempt.id}")
                     )
                 }
             }
@@ -999,7 +1240,8 @@ fun PastHistoryAttemptCard(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.testTag("past_history_title_${attempt.id}")
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1024,7 +1266,8 @@ fun PastHistoryAttemptCard(
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = if (isPassed) BentoEmerald.copy(alpha = 0.15f) else BentoRose.copy(alpha = 0.15f),
-                    border = BorderStroke(1.dp, if (isPassed) BentoEmerald.copy(alpha = 0.35f) else BentoRose.copy(alpha = 0.35f))
+                    border = BorderStroke(1.dp, if (isPassed) BentoEmerald.copy(alpha = 0.35f) else BentoRose.copy(alpha = 0.35f)),
+                    modifier = Modifier.testTag("past_history_score_pill_${attempt.id}")
                 ) {
                     Column(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1034,13 +1277,15 @@ fun PastHistoryAttemptCard(
                             text = "${attempt.score} / ${attempt.totalQuestions}",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (isPassed) BentoEmerald else BentoRose
+                            color = if (isPassed) BentoEmerald else BentoRose,
+                            modifier = Modifier.testTag("past_history_score_${attempt.id}")
                         )
                         Text(
                             text = "${String.format("%.0f", attempt.percentage)}% • ${if (isPassed) "Passed" else "Failed"}",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (isPassed) BentoEmerald else BentoRose
+                            color = if (isPassed) BentoEmerald else BentoRose,
+                            modifier = Modifier.testTag("past_history_percentage_${attempt.id}")
                         )
                     }
                 }
@@ -1136,7 +1381,7 @@ fun PastHistoryAttemptCard(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                Icons.Default.HelpOutline,
+                                Icons.AutoMirrored.Filled.HelpOutline,
                                 contentDescription = null,
                                 tint = BentoAmber,
                                 modifier = Modifier.size(14.dp)
@@ -1176,7 +1421,7 @@ fun PastHistoryAttemptCard(
                     )
                 ) {
                     Icon(
-                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.FactCheck,
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.AutoMirrored.Filled.FactCheck,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = if (isExpanded) BentoViolet else MaterialTheme.colorScheme.onSurface
@@ -1409,7 +1654,7 @@ fun QuestionReviewItem(eval: QuestionEvaluation) {
                         text = "UNANSWERED",
                         containerColor = BentoAmber.copy(alpha = 0.15f),
                         contentColor = BentoAmber,
-                        icon = Icons.Default.HelpOutline
+                        icon = Icons.AutoMirrored.Filled.HelpOutline
                     )
                 } else {
                     BentoPillTag(
@@ -1512,7 +1757,7 @@ fun QuestionReviewItem(eval: QuestionEvaluation) {
                                 when {
                                     isUserChoice && isCorrectChoice -> {
                                         BentoPillTag(
-                                            text = "Your Answer ✓",
+                                            text = "Your Answer",
                                             containerColor = BentoEmerald.copy(alpha = 0.15f),
                                             contentColor = BentoEmerald,
                                             icon = Icons.Default.CheckCircle
@@ -1520,7 +1765,7 @@ fun QuestionReviewItem(eval: QuestionEvaluation) {
                                     }
                                     isUserChoice && !isCorrectChoice -> {
                                         BentoPillTag(
-                                            text = "Your Answer ✗",
+                                            text = "Your Answer",
                                             containerColor = BentoRose.copy(alpha = 0.15f),
                                             contentColor = BentoRose,
                                             icon = Icons.Default.Cancel

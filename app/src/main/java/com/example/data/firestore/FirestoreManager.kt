@@ -749,6 +749,55 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
     }
 
     /**
+     * Directly queries and retrieves completed quizzes and scores for a student from Cloud Firestore,
+     * ordered chronologically. Automatically updates the local database cache with retrieved attempts.
+     */
+    suspend fun fetchStudentAttemptsFromFirestore(studentId: String): List<QuizAttemptEntity> {
+        val db = firestore ?: return emptyList()
+        return try {
+            val querySnapshot = if (studentId.isNotBlank()) {
+                db.collection(COLLECTION_ATTEMPTS)
+                    .whereEqualTo("studentId", studentId)
+                    .get()
+                    .awaitTask()
+            } else {
+                db.collection(COLLECTION_ATTEMPTS)
+                    .get()
+                    .awaitTask()
+            }
+
+            val attempts = querySnapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                QuizAttemptEntity(
+                    id = doc.id,
+                    quizSetId = data["quizSetId"] as? String ?: "",
+                    quizTitle = data["quizTitle"] as? String ?: "",
+                    categoryName = data["categoryName"] as? String ?: "",
+                    studentId = data["studentId"] as? String ?: "",
+                    studentName = data["studentName"] as? String ?: "",
+                    studentEmail = data["studentEmail"] as? String ?: "",
+                    studentPhotoUrl = data["studentPhotoUrl"] as? String ?: "",
+                    score = (data["score"] as? Long)?.toInt() ?: 0,
+                    totalQuestions = (data["totalQuestions"] as? Long)?.toInt() ?: 0,
+                    percentage = (data["percentage"] as? Double)?.toFloat()
+                        ?: (data["percentage"] as? Long)?.toFloat() ?: 0f,
+                    timeSpentSeconds = (data["timeSpentSeconds"] as? Long)?.toInt() ?: 0,
+                    completedAt = (data["completedAt"] as? Long) ?: System.currentTimeMillis(),
+                    userAnswersJson = data["userAnswersJson"] as? String ?: "{}"
+                )
+            }.sortedByDescending { it.completedAt }
+
+            // Insert into local cache for offline availability
+            attempts.forEach { quizDao.insertAttempt(it) }
+            Log.d(TAG, "Retrieved ${attempts.size} completed quizzes from Firestore for student: $studentId")
+            attempts
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed retrieving completed quizzes from Firestore: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
      * Directly queries and fetches top-performing students from Cloud Firestore,
      * aggregating all completed quiz attempt documents from COLLECTION_ATTEMPTS ("quiz_attempts")
      * and ranking students by total points earned across all quizzes.

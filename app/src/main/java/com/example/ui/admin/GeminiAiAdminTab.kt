@@ -1151,7 +1151,7 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                         FailoverStepRow(
                             stepNumber = "2",
                             title = "Model Fallback Hierarchy",
-                            desc = "If all keys are rate-limited on the primary model, the engine falls back to secondary models (gemini-2.5-flash ➔ gemini-2.5-pro ➔ gemini-2.0-flash)."
+                            desc = "If all keys are rate-limited on the primary model, the engine falls back to secondary models (gemini-2.5-flash -> gemini-2.5-pro -> gemini-2.0-flash)."
                         )
                         HorizontalDivider()
                         FailoverStepRow(
@@ -1456,12 +1456,23 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                                             )
                                             if (isCorrect) {
                                                 Spacer(Modifier.weight(1f))
-                                                Text(
-                                                    text = "✓ Correct",
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = BentoEmerald
-                                                )
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = BentoEmerald,
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                    Text(
+                                                        text = "Correct",
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = BentoEmerald
+                                                    )
+                                                }
                                             }
                                         }
                                     }

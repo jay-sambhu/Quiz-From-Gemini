@@ -3,6 +3,7 @@ package com.example.ui.navigation
 import android.widget.Toast
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +19,7 @@ import com.example.ui.auth.LoginScreen
 import com.example.ui.leaderboard.LeaderboardScreen
 import com.example.ui.settings.UserSettingsScreen
 import com.example.ui.student.AttemptHistoryScreen
+import com.example.ui.student.PastHistoryScreen
 import com.example.ui.student.QuizResultScreen
 import com.example.ui.student.StudentDashboardScreen
 import com.example.ui.student.TakeQuizScreen
@@ -25,14 +27,15 @@ import com.example.ui.teacher.TeacherDashboardScreen
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Auth : Screen("auth", "Sign In", Icons.Default.AccountCircle)
-    object StudentDashboard : Screen("student_dashboard", "Student", Icons.Default.MenuBook)
+    object StudentDashboard : Screen("student_dashboard", "Student", Icons.AutoMirrored.Filled.MenuBook)
     object TeacherDashboard : Screen("teacher_dashboard", "Teacher", Icons.Default.School)
     object AdminDashboard : Screen("admin_dashboard", "Admin", Icons.Default.AdminPanelSettings)
     object Leaderboard : Screen("leaderboard", "Leaderboard", Icons.Default.Leaderboard)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     object TakeQuiz : Screen("take_quiz", "Take Quiz", Icons.Default.PlayArrow)
     object QuizResult : Screen("quiz_result", "Results", Icons.Default.CheckCircle)
-    object AttemptHistory : Screen("attempt_history", "History", Icons.Default.History)
+    object AttemptHistory : Screen("attempt_history", "Past History", Icons.Default.History)
+    object PastHistory : Screen("past_history", "Past History", Icons.Default.History)
 }
 
 @Composable
@@ -71,6 +74,7 @@ fun AppNavigation(viewModel: QuizViewModel) {
             }
             UserRole.STUDENT -> {
                 list.add(Screen.StudentDashboard)
+                list.add(Screen.PastHistory)
                 list.add(Screen.Leaderboard)
                 list.add(Screen.Settings)
             }
@@ -165,7 +169,10 @@ fun AppNavigation(viewModel: QuizViewModel) {
                         navController.navigate(Screen.TakeQuiz.route)
                     },
                     onViewHistory = {
-                        navController.navigate(Screen.AttemptHistory.route)
+                        navController.navigate(Screen.PastHistory.route)
+                    },
+                    onViewLeaderboard = {
+                        navController.navigate(Screen.Leaderboard.route)
                     }
                 )
             }
@@ -179,7 +186,12 @@ fun AppNavigation(viewModel: QuizViewModel) {
             }
 
             composable(Screen.Leaderboard.route) {
-                LeaderboardScreen(viewModel = viewModel)
+                LeaderboardScreen(
+                    viewModel = viewModel,
+                    onTakeQuiz = {
+                        navController.navigate(Screen.StudentDashboard.route)
+                    }
+                )
             }
 
             composable(Screen.Settings.route) {
@@ -216,13 +228,24 @@ fun AppNavigation(viewModel: QuizViewModel) {
                         }
                     },
                     onReviewHistory = {
-                        navController.navigate(Screen.AttemptHistory.route)
+                        navController.navigate(Screen.PastHistory.route)
                     }
                 )
             }
 
             composable(Screen.AttemptHistory.route) {
-                AttemptHistoryScreen(
+                PastHistoryScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    onRetakeQuiz = { quizSet ->
+                        viewModel.startQuiz(quizSet)
+                        navController.navigate(Screen.TakeQuiz.route)
+                    }
+                )
+            }
+
+            composable(Screen.PastHistory.route) {
+                PastHistoryScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
                     onRetakeQuiz = { quizSet ->

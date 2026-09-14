@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -88,7 +89,7 @@ fun RechartsBarChartView(
                 ) {
                     Icon(
                         imageVector = when (chartMode) {
-                            ChartDisplayMode.TRENDS -> Icons.Default.TrendingUp
+                            ChartDisplayMode.TRENDS -> Icons.AutoMirrored.Filled.TrendingUp
                             ChartDisplayMode.QUIZZES -> Icons.Default.Quiz
                             ChartDisplayMode.STUDENTS -> Icons.Default.Person
                             ChartDisplayMode.DISTRIBUTION -> Icons.Default.PieChart
@@ -463,8 +464,63 @@ private fun generateRechartsHtml(
         ResponsiveContainer, Cell, ReferenceLine
       } = window.Recharts;
 
+      // React Icons (Lucide / Feather / FontAwesome SVG icon components for React)
+      const ReactIcons = {
+        TrendingUp: function(props) {
+          const s = props.size || 22;
+          const c = props.color || 'currentColor';
+          return React.createElement('svg', {
+            width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: c,
+            strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
+          },
+            React.createElement('polyline', { points: '23 6 13.5 15.5 8.5 10.5 1 18' }),
+            React.createElement('polyline', { points: '17 6 23 6 23 12' })
+          );
+        },
+        BarChart: function(props) {
+          const s = props.size || 22;
+          const c = props.color || 'currentColor';
+          return React.createElement('svg', {
+            width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: c,
+            strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
+          },
+            React.createElement('line', { x1: '18', y1: '20', x2: '18', y2: '10' }),
+            React.createElement('line', { x1: '12', y1: '20', x2: '12', y2: '4' }),
+            React.createElement('line', { x1: '6', y1: '20', x2: '6', y2: '14' })
+          );
+        },
+        PieChart: function(props) {
+          const s = props.size || 22;
+          const c = props.color || 'currentColor';
+          return React.createElement('svg', {
+            width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: c,
+            strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
+          },
+            React.createElement('path', { d: 'M21.21 15.89A10 10 0 1 1 8 2.83' }),
+            React.createElement('path', { d: 'M22 12A10 10 0 0 0 12 2v10z' })
+          );
+        },
+        Users: function(props) {
+          const s = props.size || 22;
+          const c = props.color || 'currentColor';
+          return React.createElement('svg', {
+            width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: c,
+            strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
+          },
+            React.createElement('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
+            React.createElement('circle', { cx: '9', cy: '7', r: '4' }),
+            React.createElement('path', { d: 'M23 21v-2a4 4 0 0 0-3-3.87' }),
+            React.createElement('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' })
+          );
+        }
+      };
+
       function App() {
         if (!chartData || chartData.length === 0) {
+          const ActiveIcon = chartMode === 'TRENDS' ? ReactIcons.TrendingUp :
+                             chartMode === 'QUIZZES' ? ReactIcons.BarChart :
+                             chartMode === 'STUDENTS' ? ReactIcons.Users : ReactIcons.PieChart;
+
           return React.createElement('div', {
             style: {
               height: '280px',
@@ -477,7 +533,21 @@ private fun generateRechartsHtml(
               padding: '20px'
             }
           },
-            React.createElement('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '📈'),
+            React.createElement('div', {
+              style: {
+                width: '52px',
+                height: '52px',
+                borderRadius: '50%',
+                backgroundColor: isDark ? 'rgba(99, 102, 241, 0.16)' : 'rgba(99, 102, 241, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '12px',
+                color: '#6366F1'
+              }
+            },
+              React.createElement(ActiveIcon, { size: 26, color: '#6366F1' })
+            ),
             React.createElement('div', { style: { fontWeight: '700', fontSize: '14px', color: isDark ? '#E2E8F0' : '#1E293B' } }, 'No Performance Data Yet'),
             React.createElement('div', { style: { fontSize: '11px', marginTop: '4px', maxWidth: '240px', lineHeight: '1.5' } }, 'Quiz results and student progress trends will automatically graph here once attempts are recorded.')
           );
@@ -661,9 +731,14 @@ private fun generateRechartsHtml(
       const plotH = height - padTop - padBottom;
 
       if (!chartData || chartData.length === 0) {
+        const cx = width / 2;
         let emptySvg = '<svg width="100%" height="280" viewBox="0 0 ' + width + ' ' + height + '" xmlns="http://www.w3.org/2000/svg">';
-        emptySvg += '<text x="' + (width / 2) + '" y="' + (height / 2 - 8) + '" fill="' + (isDark ? '#E2E8F0' : '#1E293B') + '" font-size="14" font-weight="bold" text-anchor="middle">No Performance Data Yet</text>';
-        emptySvg += '<text x="' + (width / 2) + '" y="' + (height / 2 + 14) + '" fill="' + axisStroke + '" font-size="11" text-anchor="middle">Student quiz results and trends will appear here.</text>';
+        // Vector Icon Badge
+        emptySvg += '<circle cx="' + cx + '" cy="100" r="24" fill="' + (isDark ? 'rgba(99,102,241,0.18)' : 'rgba(99,102,241,0.1)') + '" />';
+        emptySvg += '<path d="M ' + (cx - 10) + ' 106 L ' + (cx - 4) + ' 100 L ' + (cx + 1) + ' 103 L ' + (cx + 9) + ' 94" fill="none" stroke="#6366F1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />';
+        emptySvg += '<path d="M ' + (cx + 4) + ' 94 L ' + (cx + 9) + ' 94 L ' + (cx + 9) + ' 99" fill="none" stroke="#6366F1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />';
+        emptySvg += '<text x="' + cx + '" y="146" fill="' + (isDark ? '#E2E8F0' : '#1E293B') + '" font-size="14" font-weight="bold" text-anchor="middle">No Performance Data Yet</text>';
+        emptySvg += '<text x="' + cx + '" y="166" fill="' + axisStroke + '" font-size="11" text-anchor="middle">Student quiz results and trends will appear here.</text>';
         emptySvg += '</svg>';
         fallback.innerHTML = emptySvg;
         return;

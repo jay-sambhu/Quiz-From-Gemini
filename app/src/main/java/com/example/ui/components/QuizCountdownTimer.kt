@@ -259,7 +259,7 @@ fun QuizCountdownTimerCard(
                 Text(
                     text = when (urgencyLevel) {
                         TimerUrgencyLevel.EXPIRED -> "Auto-submitting test now. Please wait..."
-                        TimerUrgencyLevel.CRITICAL -> "⚡ Answers will auto-submit when timer expires"
+                        TimerUrgencyLevel.CRITICAL -> "Answers will auto-submit when timer expires"
                         TimerUrgencyLevel.WARNING -> "Tip: Review any skipped questions before time runs out"
                         TimerUrgencyLevel.NORMAL -> "Auto-submits automatically at 00:00"
                     },

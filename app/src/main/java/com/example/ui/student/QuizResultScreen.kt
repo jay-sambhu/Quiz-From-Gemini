@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FactCheck
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -165,8 +166,8 @@ fun QuizResultScreen(
 
                         Text(
                             text = when {
-                                isPerfectScore -> "Flawless! Perfect Score! 🏆"
-                                isPassed -> "Congratulations! Test Passed 🎉"
+                                isPerfectScore -> "Flawless! Perfect Score!"
+                                isPassed -> "Congratulations! Test Passed"
                                 else -> "Keep Practicing! Test Failed"
                             },
                             style = MaterialTheme.typography.titleLarge,
@@ -274,7 +275,7 @@ fun QuizResultScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(Icons.Default.FactCheck, contentDescription = null)
+                            Icon(Icons.AutoMirrored.Filled.FactCheck, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Review Attempt History & Explanations", fontWeight = FontWeight.SemiBold)
                         }
@@ -297,13 +298,13 @@ fun QuizResultScreen(
     if (showShareDialog) {
         val shareText = if (isPerfectScore) {
             """
-            🌟 FLAWLESS 100% PERFECT SCORE! 🏆
+            FLAWLESS 100% PERFECT SCORE!
             I scored ${attempt.score}/${attempt.totalQuestions} (100%) on '${attempt.quizTitle}' in Quiz Platform!
             Can you match my perfect score?
             """.trimIndent()
         } else {
             """
-            🏆 I just scored ${attempt.score}/${attempt.totalQuestions} (${String.format("%.0f", attempt.percentage)}%) on '${attempt.quizTitle}' in Quiz Platform! 
+            I scored ${attempt.score}/${attempt.totalQuestions} (${String.format("%.0f", attempt.percentage)}%) on '${attempt.quizTitle}' in Quiz Platform! 
             Can you beat my score? Download Quiz Platform to compete!
             """.trimIndent()
         }

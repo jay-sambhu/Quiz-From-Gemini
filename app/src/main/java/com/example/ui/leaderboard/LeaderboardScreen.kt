@@ -326,7 +326,17 @@ fun LeaderboardScreen(
                             enabled = !isFetching,
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text("Sync Now", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BentoViolet)
+                            if (isFetching) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = BentoViolet
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Syncing...", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BentoViolet)
+                            } else {
+                                Text("Sync Now", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BentoViolet)
+                            }
                         }
                     }
                 }
@@ -454,18 +464,34 @@ fun LeaderboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = if (myRank == 1) {
-                                        "👑 Leading 1st Place! Keep it up!"
-                                    } else if (aheadOfMe != null) {
-                                        "🔥 ${pointsDiffToNext + 1} pts behind #${myRank - 1} (${aheadOfMe.studentName})"
-                                    } else {
-                                        "Take quizzes to climb ranks!"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.weight(1f, fill = false)
+                                ) {
+                                    val statusIcon = if (myRank == 1) Icons.Default.EmojiEvents else Icons.AutoMirrored.Filled.TrendingUp
+                                    val statusColor = if (myRank == 1) Color(0xFFF59E0B) else BentoPrimary
+                                    Icon(
+                                        imageVector = statusIcon,
+                                        contentDescription = null,
+                                        tint = statusColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = if (myRank == 1) {
+                                            "Leading 1st Place! Keep it up!"
+                                        } else if (aheadOfMe != null) {
+                                            "${pointsDiffToNext + 1} pts behind #${myRank - 1} (${aheadOfMe.studentName})"
+                                        } else {
+                                            "Take quizzes to climb ranks!"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
 
                                 Text(
                                     text = "${String.format(Locale.getDefault(), "%.0f", myEntry.percentile)}th percentile",
@@ -604,13 +630,37 @@ fun LeaderboardScreen(
 
             // Loading Shimmer or Empty State or List
             if (isFetching && effectiveLeaderboard.isEmpty()) {
-                items(4) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(36.dp),
+                                color = BentoViolet,
+                                strokeWidth = 3.dp
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Loading Live Leaderboard from Firestore...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = BentoViolet,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+                items(3) {
                     LeaderboardShimmerRow()
                 }
             } else if (filteredEntries.isEmpty()) {
                 item {
                     NoLeaderboardEmptyState(
                         isCard = true,
+                        onTakeQuizToClimb = onTakeQuiz,
                         testTag = "leaderboard_screen_empty_state"
                     )
                 }

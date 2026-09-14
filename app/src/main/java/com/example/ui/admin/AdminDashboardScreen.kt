@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -44,6 +45,8 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
     val recentLogs by viewModel.recentSystemLogs.collectAsState()
     val allUsers by viewModel.allUsers.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
+    val isSyncingFirestore by viewModel.isSyncingFirestore.collectAsState()
+    val isLoggingDiagnostic by viewModel.isLoggingDiagnostic.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Bento Hub, 1: System Logs, 2: User Roster, 3: Categories
     var showAddCategoryDialog by remember { mutableStateOf(false) }
@@ -98,23 +101,41 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
                 actions = {
                     IconButton(
                         onClick = { viewModel.forceSyncFirestore() },
+                        enabled = !isSyncingFirestore,
                         modifier = Modifier.testTag("admin_force_sync_btn")
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Sync,
-                            contentDescription = "Force Sync Cloud",
-                            tint = BentoPrimary
-                        )
+                        if (isSyncingFirestore) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = BentoPrimary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Sync,
+                                contentDescription = "Force Sync Cloud",
+                                tint = BentoPrimary
+                            )
+                        }
                     }
                     IconButton(
                         onClick = { viewModel.triggerAdminDiagnosticLog() },
+                        enabled = !isLoggingDiagnostic,
                         modifier = Modifier.testTag("admin_run_diagnostic_btn")
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.BugReport,
-                            contentDescription = "Run Diagnostics",
-                            tint = BentoCyan
-                        )
+                        if (isLoggingDiagnostic) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = BentoCyan
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.BugReport,
+                                contentDescription = "Run Diagnostics",
+                                tint = BentoCyan
+                            )
+                        }
                     }
                 }
             )
@@ -140,6 +161,7 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
             // Live Cloud Status Header Banner
             FirestoreLiveStatusBanner(
                 metrics = platformMetrics,
+                isSyncing = isSyncingFirestore,
                 onForceSync = { viewModel.forceSyncFirestore() }
             )
 
@@ -160,7 +182,7 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
                     text = { Text("System Logs (${recentLogs.size})", fontWeight = FontWeight.SemiBold) },
-                    icon = { Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    icon = { Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
                     selected = selectedTab == 2,
@@ -192,6 +214,8 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
                         metrics = platformMetrics,
                         recentLogs = recentLogs,
                         allCategories = allCategories,
+                        isSyncing = isSyncingFirestore,
+                        isLoggingDiagnostic = isLoggingDiagnostic,
                         onNavigateToLogs = { selectedTab = 1 },
                         onNavigateToUsers = { selectedTab = 2 },
                         onNavigateToCategories = { selectedTab = 3 },
@@ -202,6 +226,7 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
                     )
                     1 -> FullSystemLogsTab(
                         logs = recentLogs,
+                        isLoggingDiagnostic = isLoggingDiagnostic,
                         onTriggerDiagnostic = { viewModel.triggerAdminDiagnosticLog() }
                     )
                     2 -> UserRosterTab(
@@ -295,6 +320,7 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
 @Composable
 fun FirestoreLiveStatusBanner(
     metrics: AdminPlatformMetrics,
+    isSyncing: Boolean = false,
     onForceSync: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -342,25 +368,39 @@ fun FirestoreLiveStatusBanner(
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = BentoPrimary.copy(alpha = 0.12f),
-                modifier = Modifier.clickable { onForceSync() }
+                modifier = Modifier.clickable(enabled = !isSyncing) { onForceSync() }
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.CloudDone,
-                        contentDescription = null,
-                        tint = BentoPrimary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "${metrics.totalCloudDocumentsCount} Docs Synced",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = BentoPrimary
-                    )
+                    if (isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 1.5.dp,
+                            color = BentoPrimary
+                        )
+                        Text(
+                            text = "Syncing...",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = BentoPrimary
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.CloudDone,
+                            contentDescription = null,
+                            tint = BentoPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "${metrics.totalCloudDocumentsCount} Docs Synced",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = BentoPrimary
+                        )
+                    }
                 }
             }
         }
@@ -375,6 +415,8 @@ fun BentoGridOverviewTab(
     metrics: AdminPlatformMetrics,
     recentLogs: List<SystemLogItem>,
     allCategories: List<CategoryEntity>,
+    isSyncing: Boolean = false,
+    isLoggingDiagnostic: Boolean = false,
     onNavigateToLogs: () -> Unit,
     onNavigateToUsers: () -> Unit,
     onNavigateToCategories: () -> Unit,
@@ -435,6 +477,7 @@ fun BentoGridOverviewTab(
             BentoCloudDatastoreCard(
                 metrics = metrics,
                 logsCount = recentLogs.size,
+                isSyncing = isSyncing,
                 onForceSync = onForceSync
             )
         }
@@ -447,7 +490,8 @@ fun BentoGridOverviewTab(
                 selectedFilter = selectedLogFilter,
                 onFilterSelect = { selectedLogFilter = it },
                 onViewAll = onNavigateToLogs,
-                onRunDiagnostic = onRunDiagnostic
+                onRunDiagnostic = onRunDiagnostic,
+                isLoggingDiagnostic = isLoggingDiagnostic
             )
         }
 
@@ -457,7 +501,9 @@ fun BentoGridOverviewTab(
                 onAddCategory = onAddCategory,
                 onRunDiagnostic = onRunDiagnostic,
                 onForceSync = onForceSync,
-                onNavigateToApiConfig = onNavigateToApiConfig
+                onNavigateToApiConfig = onNavigateToApiConfig,
+                isSyncing = isSyncing,
+                isLoggingDiagnostic = isLoggingDiagnostic
             )
         }
     }
@@ -780,6 +826,7 @@ fun BentoPlatformPerformanceCard(
 fun BentoCloudDatastoreCard(
     metrics: AdminPlatformMetrics,
     logsCount: Int,
+    isSyncing: Boolean = false,
     onForceSync: () -> Unit
 ) {
     BentoCard(
@@ -812,14 +859,23 @@ fun BentoCloudDatastoreCard(
 
             IconButton(
                 onClick = onForceSync,
+                enabled = !isSyncing,
                 modifier = Modifier.size(28.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Sync Datastore",
-                    tint = BentoPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
+                if (isSyncing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 1.5.dp,
+                        color = BentoPrimary
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Sync Datastore",
+                        tint = BentoPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
 
@@ -907,7 +963,8 @@ fun BentoRecentLogsSection(
     selectedFilter: String,
     onFilterSelect: (String) -> Unit,
     onViewAll: () -> Unit,
-    onRunDiagnostic: () -> Unit
+    onRunDiagnostic: () -> Unit,
+    isLoggingDiagnostic: Boolean = false
 ) {
     BentoCard(
         modifier = Modifier.fillMaxWidth(),
@@ -987,12 +1044,23 @@ fun BentoRecentLogsSection(
 
         OutlinedButton(
             onClick = onRunDiagnostic,
+            enabled = !isLoggingDiagnostic,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Record Admin Diagnostic Test in Firestore", fontWeight = FontWeight.SemiBold)
+            if (isLoggingDiagnostic) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = BentoCyan
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Recording Diagnostic in Firestore...", fontWeight = FontWeight.SemiBold)
+            } else {
+                Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Record Admin Diagnostic Test in Firestore", fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
@@ -1102,7 +1170,9 @@ fun BentoQuickActionsCard(
     onAddCategory: () -> Unit,
     onRunDiagnostic: () -> Unit,
     onForceSync: () -> Unit,
-    onNavigateToApiConfig: () -> Unit = {}
+    onNavigateToApiConfig: () -> Unit = {},
+    isSyncing: Boolean = false,
+    isLoggingDiagnostic: Boolean = false
 ) {
     BentoCard(
         modifier = Modifier.fillMaxWidth(),
@@ -1143,12 +1213,23 @@ fun BentoQuickActionsCard(
 
             OutlinedButton(
                 onClick = onForceSync,
+                enabled = !isSyncing,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Sync Cloud", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                if (isSyncing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 1.5.dp,
+                        color = BentoPrimary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Syncing...", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                } else {
+                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Sync Cloud", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -1160,6 +1241,7 @@ fun BentoQuickActionsCard(
 @Composable
 fun FullSystemLogsTab(
     logs: List<SystemLogItem>,
+    isLoggingDiagnostic: Boolean = false,
     onTriggerDiagnostic: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -1198,6 +1280,38 @@ fun FullSystemLogsTab(
             shape = RoundedCornerShape(14.dp)
         )
 
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${filteredLogs.size} Events Logged",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(
+                onClick = onTriggerDiagnostic,
+                enabled = !isLoggingDiagnostic
+            ) {
+                if (isLoggingDiagnostic) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 1.5.dp,
+                        color = BentoCyan
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Pinging Firestore...", style = MaterialTheme.typography.labelMedium, color = BentoCyan)
+                } else {
+                    Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(16.dp), tint = BentoCyan)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Run Diagnostic Ping", style = MaterialTheme.typography.labelMedium, color = BentoCyan)
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(10.dp))
 
         LazyRow(
@@ -1232,7 +1346,7 @@ fun FullSystemLogsTab(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        imageVector = Icons.Default.ReceiptLong,
+                        imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)

@@ -50,7 +50,7 @@ fun TopStudentsLeaderboardComponent(
     val cloudSyncMessage by viewModel.cloudSyncMessage.collectAsState()
 
     var sortCriterion by remember { mutableStateOf(LeaderboardSortCriterion.TOTAL_POINTS) }
-    var isSyncing by remember { mutableStateOf(false) }
+    val isSyncingFirestore by viewModel.isSyncingFirestore.collectAsState()
 
     // Sort entries according to selected criterion (Total Points vs. Accuracy %)
     val sortedEntries = remember(rawEntries, sortCriterion) {
@@ -160,21 +160,29 @@ fun TopStudentsLeaderboardComponent(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = {
-                            isSyncing = true
                             viewModel.syncWithFirestoreCloud()
                         },
+                        enabled = !isSyncingFirestore,
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                             .testTag("refresh_leaderboard_firestore_btn")
                     ) {
-                        Icon(
-                            Icons.Default.CloudSync,
-                            contentDescription = "Sync from Firestore",
-                            tint = if (isCloudConnected) BentoEmerald else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        if (isSyncingFirestore) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = BentoEmerald
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.CloudSync,
+                                contentDescription = "Sync from Firestore",
+                                tint = if (isCloudConnected) BentoEmerald else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
 
                     if (isCompactPreview && onViewFullLeaderboard != null) {

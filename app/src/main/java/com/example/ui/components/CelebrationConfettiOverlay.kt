@@ -523,7 +523,7 @@ fun PerfectScoreCelebrationBadge(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = "Flawless Mastery! 🎉",
+                    text = "Flawless Mastery!",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Black,
                     color = Color(0xFF78350F)
@@ -555,7 +555,7 @@ fun PerfectScoreCelebrationBadge(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Blast Confetti Again 🎊",
+                        text = "Blast Confetti Again",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
                     )

@@ -158,6 +158,45 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     val notificationLogs: StateFlow<List<NotificationLogEntity>> = repository.allNotificationLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // --- Student Past History Firestore Flows ---
+    private val _isFetchingFirestoreHistory = MutableStateFlow(false)
+    val isFetchingFirestoreHistory: StateFlow<Boolean> = _isFetchingFirestoreHistory.asStateFlow()
+
+    private val _firestoreHistoryLastSynced = MutableStateFlow(0L)
+    val firestoreHistoryLastSynced: StateFlow<Long> = _firestoreHistoryLastSynced.asStateFlow()
+
+    // --- General Cloud Firestore Sync & Network Operation Flows ---
+    private val _isSyncingFirestore = MutableStateFlow(false)
+    val isSyncingFirestore: StateFlow<Boolean> = _isSyncingFirestore.asStateFlow()
+
+    private val _isLoggingDiagnostic = MutableStateFlow(false)
+    val isLoggingDiagnostic: StateFlow<Boolean> = _isLoggingDiagnostic.asStateFlow()
+
+    private val _isUpdatingProfilePhoto = MutableStateFlow(false)
+    val isUpdatingProfilePhoto: StateFlow<Boolean> = _isUpdatingProfilePhoto.asStateFlow()
+
+    private val _deletingQuizSetId = MutableStateFlow<String?>(null)
+    val deletingQuizSetId: StateFlow<String?> = _deletingQuizSetId.asStateFlow()
+
+    private val _isSavingQuestion = MutableStateFlow(false)
+    val isSavingQuestion: StateFlow<Boolean> = _isSavingQuestion.asStateFlow()
+
+    fun refreshStudentPastHistoryFromFirestore() {
+        val studentId = currentUser.value?.id ?: return
+        viewModelScope.launch {
+            _isFetchingFirestoreHistory.value = true
+            try {
+                val retrieved = repository.fetchStudentAttemptsFromFirestore(studentId)
+                _firestoreHistoryLastSynced.value = System.currentTimeMillis()
+                _uiEventMessage.value = "Retrieved ${retrieved.size} completed quizzes from Firestore"
+            } catch (e: Exception) {
+                Log.w("QuizViewModel", "Failed to retrieve student past history from Firestore: ${e.message}")
+            } finally {
+                _isFetchingFirestoreHistory.value = false
+            }
+        }
+    }
+
     // Aggregated real-time system logs directly from Firestore
     val recentSystemLogs: StateFlow<List<SystemLogItem>> = firestoreManager.systemLogs
 
@@ -274,6 +313,247 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private var timerJob: Job? = null
+    private var isExplicitlySignedOut = false
+
+    // --- Personal Progress Summary for Student ---
+    val studentProgressSummary: StateFlow<StudentProgressSummary> = combine(
+        currentUser,
+        allAttempts,
+        allQuizSets,
+        allUsers
+    ) { user, attempts, quizSets, users ->
+        val activeStudent = user ?: users.find { it.role == UserRole.STUDENT } ?: users.firstOrNull()
+        val studentId = activeStudent?.id ?: ""
+        val userAttempts = attempts.filter { it.studentId == studentId }
+        val totalDone = userAttempts.size
+        val totalPts = userAttempts.sumOf { it.score }
+        val avgAcc = if (totalDone > 0) userAttempts.map { it.percentage.toDouble() }.average().toFloat() else 0f
+        val passed = userAttempts.count { it.percentage >= 60f }
+        val passRate = if (totalDone > 0) (passed.toFloat() / totalDone.toFloat()) * 100f else 0f
+        val timeMinutes = userAttempts.sumOf { it.timeSpentSeconds } / 60
+        val latestPct = userAttempts.maxByOrNull { it.completedAt }?.percentage ?: 0f
+
+        val students = users.filter { it.role == UserRole.STUDENT }
+        val studentRanks = students.map { s ->
+            val sAttempts = attempts.filter { it.studentId == s.id }
+            s.id to sAttempts.sumOf { it.score }
+        }.sortedByDescending { it.second }
+        val rankIndex = studentRanks.indexOfFirst { it.first == studentId }
+        val rank = if (rankIndex >= 0) rankIndex + 1 else 1
+        val studentCount = studentRanks.size
+        val percentile = if (studentCount > 1) {
+            ((studentCount - rank).toFloat() / (studentCount - 1).toFloat()) * 100f
+        } else {
+            100f
+        }
+
+        val attemptedQuizIds = userAttempts.map { it.quizSetId }.toSet()
+        val upcomingCount = quizSets.count { it.id !in attemptedQuizIds }
+
+        val tier = when {
+            totalPts >= 25 || (avgAcc >= 90f && totalDone >= 2) -> "Master Scholar"
+            totalPts >= 10 || avgAcc >= 75f -> "Advanced Scholar"
+            totalDone >= 1 -> "Active Scholar"
+            else -> "Novice Scholar"
+        }
+
+        StudentProgressSummary(
+            totalQuizzesCompleted = totalDone,
+            totalPointsEarned = totalPts,
+            averageAccuracy = avgAcc,
+            passRatePercentage = passRate,
+            totalStudyTimeMinutes = timeMinutes,
+            rank = rank,
+            percentile = percentile,
+            tierTitle = tier,
+            upcomingQuizzesCount = upcomingCount,
+            passedQuizzesCount = passed,
+            latestScorePercentage = latestPct,
+            isCloudSynced = isCloudConnected.value
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StudentProgressSummary())
+
+    // --- Analytics & Leaderboard ---
+    // Direct Firestore Leaderboard State
+    private val _firestoreLeaderboard = MutableStateFlow<List<StudentLeaderboardEntry>>(emptyList())
+    val firestoreLeaderboard: StateFlow<List<StudentLeaderboardEntry>> = _firestoreLeaderboard.asStateFlow()
+
+    private val _isFetchingLeaderboard = MutableStateFlow(false)
+    val isFetchingLeaderboard: StateFlow<Boolean> = _isFetchingLeaderboard.asStateFlow()
+
+    private val _leaderboardLastFetchedTime = MutableStateFlow<Long?>(null)
+    val leaderboardLastFetchedTime: StateFlow<Long?> = _leaderboardLastFetchedTime.asStateFlow()
+
+    private val _leaderboardFetchError = MutableStateFlow<String?>(null)
+    val leaderboardFetchError: StateFlow<String?> = _leaderboardFetchError.asStateFlow()
+
+    val leaderboardEntries: StateFlow<List<StudentLeaderboardEntry>> = combine(
+        allUsers,
+        allAttempts
+    ) { users, attempts ->
+        val students = users.filter { it.role == UserRole.STUDENT }
+        val entries = students.map { student ->
+            val studentAttempts = attempts.filter { it.studentId == student.id }
+            val totalScore = studentAttempts.sumOf { it.score }
+            val totalTaken = studentAttempts.size
+            val avgPct = if (totalTaken > 0) studentAttempts.map { it.percentage }.average().toFloat() else 0f
+            val highest = studentAttempts.maxOfOrNull { it.score } ?: 0
+            val lastActive = studentAttempts.maxOfOrNull { it.completedAt } ?: 0L
+
+            StudentLeaderboardEntry(
+                studentId = student.id,
+                studentName = student.name,
+                studentEmail = student.email,
+                photoUrl = student.photoUrl,
+                totalScore = totalScore,
+                totalQuizzesTaken = totalTaken,
+                averagePercentage = avgPct,
+                highestScore = highest,
+                lastActiveTimestamp = lastActive
+            )
+        }.sortedWith(
+            compareByDescending<StudentLeaderboardEntry> { it.totalScore }
+                .thenByDescending { it.averagePercentage }
+                .thenByDescending { it.totalQuizzesTaken }
+        )
+
+        val count = entries.size
+        entries.mapIndexed { index, item ->
+            val rank = index + 1
+            val percentile = if (count > 1) {
+                ((count - rank).toFloat() / (count - 1).toFloat()) * 100f
+            } else {
+                100f
+            }
+            item.copy(rank = rank, percentile = percentile)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val effectiveLeaderboard: StateFlow<List<StudentLeaderboardEntry>> = combine(
+        _firestoreLeaderboard,
+        leaderboardEntries
+    ) { remote, local ->
+        if (remote.isNotEmpty()) remote else local
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // --- Teacher Analytics & Student Performance ---
+    val teacherAnalyticsOverview: StateFlow<TeacherAnalyticsOverview> = combine(
+        allUsers,
+        allAttempts,
+        allQuizSets
+    ) { users, attempts, quizSets ->
+        val students = users.filter { it.role == UserRole.STUDENT }
+
+        val studentSummaries = students.map { student ->
+            val studentAttempts = attempts.filter { it.studentId == student.id }
+            val sortedStudentAttempts = studentAttempts.sortedBy { it.completedAt }
+            val scoreHistory = sortedStudentAttempts.map { it.percentage }
+            val trendDelta = if (scoreHistory.size >= 2) {
+                scoreHistory.last() - scoreHistory.first()
+            } else 0f
+            val quizzesTaken = studentAttempts.size
+            val avgScore = if (quizzesTaken > 0) studentAttempts.map { it.percentage }.average().toFloat() else 0f
+            val highestScore = studentAttempts.maxOfOrNull { it.percentage } ?: 0f
+            val passRate = if (quizzesTaken > 0) {
+                (studentAttempts.count { it.percentage >= 60f }.toFloat() / quizzesTaken.toFloat()) * 100f
+            } else 0f
+            val totalScore = studentAttempts.sumOf { it.score }
+            val gradeTier = when {
+                avgScore >= 90f -> "A (Honors)"
+                avgScore >= 80f -> "B (Proficient)"
+                avgScore >= 70f -> "C (Average)"
+                avgScore >= 60f -> "D (Passing)"
+                quizzesTaken == 0 -> "Not Started"
+                else -> "F (Needs Support)"
+            }
+
+            StudentPerformanceSummary(
+                studentId = student.id,
+                studentName = student.name,
+                studentEmail = student.email,
+                quizzesTaken = quizzesTaken,
+                averageScore = avgScore,
+                highestScore = highestScore,
+                passRate = passRate,
+                totalScore = totalScore,
+                gradeTier = gradeTier,
+                scoreHistory = scoreHistory,
+                trendDelta = trendDelta
+            )
+        }.sortedByDescending { it.averageScore }
+            .mapIndexed { idx, item -> item.copy(rank = idx + 1) }
+
+        val quizSummaries = quizSets.map { quiz ->
+            val qAttempts = attempts.filter { it.quizSetId == quiz.id }
+            val total = qAttempts.size
+            val avg = if (total > 0) qAttempts.map { it.percentage }.average().toFloat() else 0f
+            val pass = if (total > 0) (qAttempts.count { it.percentage >= quiz.passPercentage.toFloat() }.toFloat() / total.toFloat()) * 100f else 0f
+
+            QuizPerformanceSummary(
+                quizSetId = quiz.id,
+                quizTitle = quiz.title,
+                categoryName = quiz.categoryName,
+                totalAttempts = total,
+                averageScore = avg,
+                passRate = pass
+            )
+        }
+
+        val totalAttempts = attempts.size
+        val aCount = attempts.count { it.percentage >= 90f }
+        val bCount = attempts.count { it.percentage in 80f..89.9f }
+        val cCount = attempts.count { it.percentage in 70f..79.9f }
+        val dCount = attempts.count { it.percentage in 60f..69.9f }
+        val fCount = attempts.count { it.percentage < 60f }
+
+        val pct = { count: Int -> if (totalAttempts > 0) (count.toFloat() / totalAttempts.toFloat()) * 100f else 0f }
+
+        val gradeDistributions = listOf(
+            GradeDistributionItem("A", "A (90-100%)", aCount, pct(aCount), "#10B981"),
+            GradeDistributionItem("B", "B (80-89%)", bCount, pct(bCount), "#3B82F6"),
+            GradeDistributionItem("C", "C (70-79%)", cCount, pct(cCount), "#F59E0B"),
+            GradeDistributionItem("D", "D (60-69%)", dCount, pct(dCount), "#F97316"),
+            GradeDistributionItem("F", "F (<60%)", fCount, pct(fCount), "#EF4444")
+        )
+
+        val sortedAllAttempts = attempts.sortedBy { it.completedAt }
+        val quizAttemptsMap = sortedAllAttempts.groupBy { it.quizTitle }
+        val progressTrends = quizAttemptsMap.map { (title, atts) ->
+            val avg = atts.map { it.percentage }.average().toFloat()
+            val pass = if (atts.isNotEmpty()) (atts.count { it.percentage >= 60f }.toFloat() / atts.size.toFloat()) * 100f else 0f
+            ProgressTrendPoint(
+                milestone = if (title.length > 14) title.take(12) + ".." else title,
+                averageScore = avg,
+                passRate = pass,
+                attemptsCount = atts.size,
+                timestamp = atts.lastOrNull()?.completedAt ?: 0L
+            )
+        }
+
+        val scoreTrajectory = if (sortedAllAttempts.size >= 2) {
+            val half = sortedAllAttempts.size / 2
+            val firstHalfAvg = sortedAllAttempts.take(half).map { it.percentage }.average().toFloat()
+            val secondHalfAvg = sortedAllAttempts.drop(half).map { it.percentage }.average().toFloat()
+            secondHalfAvg - firstHalfAvg
+        } else 0f
+
+        val classAvg = if (totalAttempts > 0) attempts.map { it.percentage }.average().toFloat() else 0f
+        val overallPass = if (totalAttempts > 0) (attempts.count { it.percentage >= 60f }.toFloat() / totalAttempts.toFloat()) * 100f else 0f
+        val topQuiz = quizSummaries.maxByOrNull { it.averageScore }?.quizTitle ?: "No Quizzes Yet"
+
+        TeacherAnalyticsOverview(
+            totalStudentsEvaluated = students.size,
+            totalAttemptsEvaluated = totalAttempts,
+            classAverageScore = classAvg,
+            overallPassRate = overallPass,
+            topPerformingQuiz = topQuiz,
+            studentSummaries = studentSummaries,
+            quizSummaries = quizSummaries,
+            gradeDistributions = gradeDistributions,
+            progressTrends = progressTrends,
+            scoreTrajectory = scoreTrajectory
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TeacherAnalyticsOverview())
 
     init {
         // Start Firestore real-time synchronization
@@ -323,18 +603,21 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Trigger background initial cloud sync when database items are ready
+        // Fetch leaderboard immediately and trigger background initial cloud sync if data exists
         viewModelScope.launch {
             try {
-                val users = allUsers.first { it.isNotEmpty() }
-                val categories = allCategories.first { it.isNotEmpty() }
-                val quizSets = allQuizSets.first { it.isNotEmpty() }
-                val attempts = allAttempts.first()
-                val notifications = notificationLogs.first()
-                repository.syncAllDataToFirestore(users, categories, quizSets, attempts, notifications)
                 fetchLeaderboardFromFirestore()
+                kotlinx.coroutines.delay(1000L)
+                val users = allUsers.value
+                val categories = allCategories.value
+                val quizSets = allQuizSets.value
+                val attempts = allAttempts.value
+                val notifications = notificationLogs.value
+                if (users.isNotEmpty() || categories.isNotEmpty() || quizSets.isNotEmpty()) {
+                    repository.syncAllDataToFirestore(users, categories, quizSets, attempts, notifications)
+                }
             } catch (e: Exception) {
-                fetchLeaderboardFromFirestore()
+                Log.w("QuizViewModel", "Background sync setup note: ${e.message}")
             }
         }
     }
@@ -346,6 +629,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
 
     fun syncWithFirestoreCloud() {
         viewModelScope.launch {
+            _isSyncingFirestore.value = true
             _uiEventMessage.value = "Syncing with Firebase Firestore Cloud..."
             try {
                 val users = allUsers.value
@@ -357,6 +641,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                 _uiEventMessage.value = "Firestore Cloud Sync Complete!"
             } catch (e: Exception) {
                 _uiEventMessage.value = "Sync error: ${e.localizedMessage}"
+            } finally {
+                _isSyncingFirestore.value = false
             }
         }
     }
@@ -364,8 +650,6 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     fun clearUiMessage() {
         _uiEventMessage.value = null
     }
-
-    private var isExplicitlySignedOut = false
 
     // --- Firebase Auth & Session Management ---
     fun clearAuthError() {
@@ -596,16 +880,23 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     fun updateUserProfilePhoto(photoUriString: String) {
         val user = _currentUser.value ?: return
         viewModelScope.launch {
-            repository.updateUserProfilePhotoUrl(user.id, photoUriString)
-            _currentUser.value = user.copy(photoUrl = photoUriString)
-            firestoreManager.logSystemEvent(
-                title = "Profile Photo Captured",
-                description = "Updated user profile photo URI in Firestore: $photoUriString",
-                category = "SECURITY",
-                severity = "SUCCESS",
-                actor = user.name
-            )
-            _uiEventMessage.value = "Profile photo captured and saved to Firestore!"
+            _isUpdatingProfilePhoto.value = true
+            try {
+                repository.updateUserProfilePhotoUrl(user.id, photoUriString)
+                _currentUser.value = user.copy(photoUrl = photoUriString)
+                firestoreManager.logSystemEvent(
+                    title = "Profile Photo Captured",
+                    description = "Updated user profile photo URI in Firestore: $photoUriString",
+                    category = "SECURITY",
+                    severity = "SUCCESS",
+                    actor = user.name
+                )
+                _uiEventMessage.value = "Profile photo captured and saved to Firestore!"
+            } catch (e: Exception) {
+                _uiEventMessage.value = "Failed to update profile photo: ${e.localizedMessage}"
+            } finally {
+                _isUpdatingProfilePhoto.value = false
+            }
         }
     }
 
@@ -675,6 +966,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     fun forceSyncFirestore() {
         val user = _currentUser.value
         viewModelScope.launch {
+            _isSyncingFirestore.value = true
             try {
                 val users = allUsers.value
                 val categories = allCategories.value
@@ -693,6 +985,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                 _uiEventMessage.value = "Cloud Firestore force-sync complete!"
             } catch (e: Exception) {
                 _uiEventMessage.value = "Sync error: ${e.localizedMessage}"
+            } finally {
+                _isSyncingFirestore.value = false
             }
         }
     }
@@ -700,14 +994,21 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     fun triggerAdminDiagnosticLog() {
         val user = _currentUser.value
         viewModelScope.launch {
-            firestoreManager.logSystemEvent(
-                title = "Admin Health Diagnostic Passed",
-                description = "Automated Firestore latency ping (<40ms) and schema consistency verified.",
-                category = "SECURITY",
-                severity = "SUCCESS",
-                actor = user?.name ?: "System Administrator"
-            )
-            _uiEventMessage.value = "Diagnostic telemetry recorded in Cloud Firestore"
+            _isLoggingDiagnostic.value = true
+            try {
+                firestoreManager.logSystemEvent(
+                    title = "Admin Health Diagnostic Passed",
+                    description = "Automated Firestore latency ping (<40ms) and schema consistency verified.",
+                    category = "SECURITY",
+                    severity = "SUCCESS",
+                    actor = user?.name ?: "System Administrator"
+                )
+                _uiEventMessage.value = "Diagnostic telemetry recorded in Cloud Firestore"
+            } catch (e: Exception) {
+                _uiEventMessage.value = "Diagnostic error: ${e.localizedMessage}"
+            } finally {
+                _isLoggingDiagnostic.value = false
+            }
         }
     }
 
@@ -1006,8 +1307,15 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            repository.deleteQuizSet(quizSetId)
-            _uiEventMessage.value = "Quiz deleted from Cloud Firestore."
+            _deletingQuizSetId.value = quizSetId
+            try {
+                repository.deleteQuizSet(quizSetId)
+                _uiEventMessage.value = "Quiz deleted from Cloud Firestore."
+            } catch (e: Exception) {
+                _uiEventMessage.value = "Failed to delete quiz: ${e.localizedMessage}"
+            } finally {
+                _deletingQuizSetId.value = null
+            }
         }
     }
 
@@ -1027,12 +1335,15 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
+            _isSavingQuestion.value = true
             try {
                 repository.saveOrUpdateQuestion(question)
                 _uiEventMessage.value = "Question saved to Question Bank & Cloud Firestore!"
                 onSuccess?.invoke()
             } catch (e: Exception) {
                 _uiEventMessage.value = "Failed to save question: ${e.localizedMessage}"
+            } finally {
+                _isSavingQuestion.value = false
             }
         }
     }
@@ -1286,6 +1597,11 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                     timeSpentSeconds = if (timeSpent <= 0) 1 else timeSpent,
                     userAnswersJson = jsonMap.toString()
                 )
+                try {
+                    db.quizDao().insertAttempt(fallbackAttempt)
+                } catch (dbErr: Exception) {
+                    Log.w("QuizViewModel", "Local fallback attempt cache note: ${dbErr.message}")
+                }
                 _activeQuizState.value = _activeQuizState.value.copy(
                     isTimerRunning = false,
                     isSubmitting = false,
@@ -1301,127 +1617,6 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         timerJob?.cancel()
         _activeQuizState.value = ActiveQuizState()
     }
-
-    // --- Personal Progress Summary for Student ---
-    val studentProgressSummary: StateFlow<StudentProgressSummary> = combine(
-        currentUser,
-        allAttempts,
-        allQuizSets,
-        allUsers
-    ) { user, attempts, quizSets, users ->
-        val activeStudent = user ?: users.find { it.role == UserRole.STUDENT } ?: users.firstOrNull()
-        val studentId = activeStudent?.id ?: ""
-        val userAttempts = attempts.filter { it.studentId == studentId }
-        val totalDone = userAttempts.size
-        val totalPts = userAttempts.sumOf { it.score }
-        val avgAcc = if (totalDone > 0) userAttempts.map { it.percentage.toDouble() }.average().toFloat() else 0f
-        val passed = userAttempts.count { it.percentage >= 60f }
-        val passRate = if (totalDone > 0) (passed.toFloat() / totalDone.toFloat()) * 100f else 0f
-        val timeMinutes = userAttempts.sumOf { it.timeSpentSeconds } / 60
-        val latestPct = userAttempts.maxByOrNull { it.completedAt }?.percentage ?: 0f
-
-        val students = users.filter { it.role == UserRole.STUDENT }
-        val studentRanks = students.map { s ->
-            val sAttempts = attempts.filter { it.studentId == s.id }
-            s.id to sAttempts.sumOf { it.score }
-        }.sortedByDescending { it.second }
-        val rankIndex = studentRanks.indexOfFirst { it.first == studentId }
-        val rank = if (rankIndex >= 0) rankIndex + 1 else 1
-        val studentCount = studentRanks.size
-        val percentile = if (studentCount > 1) {
-            ((studentCount - rank).toFloat() / (studentCount - 1).toFloat()) * 100f
-        } else {
-            100f
-        }
-
-        val attemptedQuizIds = userAttempts.map { it.quizSetId }.toSet()
-        val upcomingCount = quizSets.count { it.id !in attemptedQuizIds }
-
-        val tier = when {
-            totalPts >= 25 || (avgAcc >= 90f && totalDone >= 2) -> "Master Scholar"
-            totalPts >= 10 || avgAcc >= 75f -> "Advanced Scholar"
-            totalDone >= 1 -> "Active Scholar"
-            else -> "Novice Scholar"
-        }
-
-        StudentProgressSummary(
-            totalQuizzesCompleted = totalDone,
-            totalPointsEarned = totalPts,
-            averageAccuracy = avgAcc,
-            passRatePercentage = passRate,
-            totalStudyTimeMinutes = timeMinutes,
-            rank = rank,
-            percentile = percentile,
-            tierTitle = tier,
-            upcomingQuizzesCount = upcomingCount,
-            passedQuizzesCount = passed,
-            latestScorePercentage = latestPct,
-            isCloudSynced = isCloudConnected.value
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StudentProgressSummary())
-
-    // --- Analytics & Leaderboard ---
-    // Direct Firestore Leaderboard State
-    private val _firestoreLeaderboard = MutableStateFlow<List<StudentLeaderboardEntry>>(emptyList())
-    val firestoreLeaderboard: StateFlow<List<StudentLeaderboardEntry>> = _firestoreLeaderboard.asStateFlow()
-
-    private val _isFetchingLeaderboard = MutableStateFlow(false)
-    val isFetchingLeaderboard: StateFlow<Boolean> = _isFetchingLeaderboard.asStateFlow()
-
-    private val _leaderboardLastFetchedTime = MutableStateFlow<Long?>(null)
-    val leaderboardLastFetchedTime: StateFlow<Long?> = _leaderboardLastFetchedTime.asStateFlow()
-
-    private val _leaderboardFetchError = MutableStateFlow<String?>(null)
-    val leaderboardFetchError: StateFlow<String?> = _leaderboardFetchError.asStateFlow()
-
-    val leaderboardEntries: StateFlow<List<StudentLeaderboardEntry>> = combine(
-        allUsers,
-        allAttempts
-    ) { users, attempts ->
-        val students = users.filter { it.role == UserRole.STUDENT }
-        val entries = students.map { student ->
-            val studentAttempts = attempts.filter { it.studentId == student.id }
-            val totalScore = studentAttempts.sumOf { it.score }
-            val totalTaken = studentAttempts.size
-            val avgPct = if (totalTaken > 0) studentAttempts.map { it.percentage }.average().toFloat() else 0f
-            val highest = studentAttempts.maxOfOrNull { it.score } ?: 0
-            val lastActive = studentAttempts.maxOfOrNull { it.completedAt } ?: 0L
-
-            StudentLeaderboardEntry(
-                studentId = student.id,
-                studentName = student.name,
-                studentEmail = student.email,
-                photoUrl = student.photoUrl,
-                totalScore = totalScore,
-                totalQuizzesTaken = totalTaken,
-                averagePercentage = avgPct,
-                highestScore = highest,
-                lastActiveTimestamp = lastActive
-            )
-        }.sortedWith(
-            compareByDescending<StudentLeaderboardEntry> { it.totalScore }
-                .thenByDescending { it.averagePercentage }
-                .thenByDescending { it.totalQuizzesTaken }
-        )
-
-        val count = entries.size
-        entries.mapIndexed { index, item ->
-            val rank = index + 1
-            val percentile = if (count > 1) {
-                ((count - rank).toFloat() / (count - 1).toFloat()) * 100f
-            } else {
-                100f
-            }
-            item.copy(rank = rank, percentile = percentile)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val effectiveLeaderboard: StateFlow<List<StudentLeaderboardEntry>> = combine(
-        _firestoreLeaderboard,
-        leaderboardEntries
-    ) { remote, local ->
-        if (remote.isNotEmpty()) remote else local
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun fetchLeaderboardFromFirestore(forceRefreshToast: Boolean = false) {
         viewModelScope.launch {
@@ -1444,125 +1639,6 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-
-    // --- Teacher Analytics & Student Performance ---
-    val teacherAnalyticsOverview: StateFlow<TeacherAnalyticsOverview> = combine(
-        allUsers,
-        allAttempts,
-        allQuizSets
-    ) { users, attempts, quizSets ->
-        val students = users.filter { it.role == UserRole.STUDENT }
-
-        val studentSummaries = students.map { student ->
-            val studentAttempts = attempts.filter { it.studentId == student.id }
-            val sortedStudentAttempts = studentAttempts.sortedBy { it.completedAt }
-            val scoreHistory = sortedStudentAttempts.map { it.percentage }
-            val trendDelta = if (scoreHistory.size >= 2) {
-                scoreHistory.last() - scoreHistory.first()
-            } else 0f
-            val quizzesTaken = studentAttempts.size
-            val avgScore = if (quizzesTaken > 0) studentAttempts.map { it.percentage }.average().toFloat() else 0f
-            val highestScore = studentAttempts.maxOfOrNull { it.percentage } ?: 0f
-            val passRate = if (quizzesTaken > 0) {
-                (studentAttempts.count { it.percentage >= 60f }.toFloat() / quizzesTaken.toFloat()) * 100f
-            } else 0f
-            val totalScore = studentAttempts.sumOf { it.score }
-            val gradeTier = when {
-                avgScore >= 90f -> "A (Honors)"
-                avgScore >= 80f -> "B (Proficient)"
-                avgScore >= 70f -> "C (Average)"
-                avgScore >= 60f -> "D (Passing)"
-                quizzesTaken == 0 -> "Not Started"
-                else -> "F (Needs Support)"
-            }
-
-            StudentPerformanceSummary(
-                studentId = student.id,
-                studentName = student.name,
-                studentEmail = student.email,
-                quizzesTaken = quizzesTaken,
-                averageScore = avgScore,
-                highestScore = highestScore,
-                passRate = passRate,
-                totalScore = totalScore,
-                gradeTier = gradeTier,
-                scoreHistory = scoreHistory,
-                trendDelta = trendDelta
-            )
-        }.sortedByDescending { it.averageScore }
-            .mapIndexed { idx, item -> item.copy(rank = idx + 1) }
-
-        val quizSummaries = quizSets.map { quiz ->
-            val qAttempts = attempts.filter { it.quizSetId == quiz.id }
-            val total = qAttempts.size
-            val avg = if (total > 0) qAttempts.map { it.percentage }.average().toFloat() else 0f
-            val pass = if (total > 0) (qAttempts.count { it.percentage >= quiz.passPercentage.toFloat() }.toFloat() / total.toFloat()) * 100f else 0f
-
-            QuizPerformanceSummary(
-                quizSetId = quiz.id,
-                quizTitle = quiz.title,
-                categoryName = quiz.categoryName,
-                totalAttempts = total,
-                averageScore = avg,
-                passRate = pass
-            )
-        }
-
-        val totalAttempts = attempts.size
-        val aCount = attempts.count { it.percentage >= 90f }
-        val bCount = attempts.count { it.percentage in 80f..89.9f }
-        val cCount = attempts.count { it.percentage in 70f..79.9f }
-        val dCount = attempts.count { it.percentage in 60f..69.9f }
-        val fCount = attempts.count { it.percentage < 60f }
-
-        val pct = { count: Int -> if (totalAttempts > 0) (count.toFloat() / totalAttempts.toFloat()) * 100f else 0f }
-
-        val gradeDistributions = listOf(
-            GradeDistributionItem("A", "A (90-100%)", aCount, pct(aCount), "#10B981"),
-            GradeDistributionItem("B", "B (80-89%)", bCount, pct(bCount), "#3B82F6"),
-            GradeDistributionItem("C", "C (70-79%)", cCount, pct(cCount), "#F59E0B"),
-            GradeDistributionItem("D", "D (60-69%)", dCount, pct(dCount), "#F97316"),
-            GradeDistributionItem("F", "F (<60%)", fCount, pct(fCount), "#EF4444")
-        )
-
-        val sortedAllAttempts = attempts.sortedBy { it.completedAt }
-        val quizAttemptsMap = sortedAllAttempts.groupBy { it.quizTitle }
-        val progressTrends = quizAttemptsMap.map { (title, atts) ->
-            val avg = atts.map { it.percentage }.average().toFloat()
-            val pass = if (atts.isNotEmpty()) (atts.count { it.percentage >= 60f }.toFloat() / atts.size.toFloat()) * 100f else 0f
-            ProgressTrendPoint(
-                milestone = if (title.length > 14) title.take(12) + ".." else title,
-                averageScore = avg,
-                passRate = pass,
-                attemptsCount = atts.size,
-                timestamp = atts.lastOrNull()?.completedAt ?: 0L
-            )
-        }
-
-        val scoreTrajectory = if (sortedAllAttempts.size >= 2) {
-            val half = sortedAllAttempts.size / 2
-            val firstHalfAvg = sortedAllAttempts.take(half).map { it.percentage }.average().toFloat()
-            val secondHalfAvg = sortedAllAttempts.drop(half).map { it.percentage }.average().toFloat()
-            secondHalfAvg - firstHalfAvg
-        } else 0f
-
-        val classAvg = if (totalAttempts > 0) attempts.map { it.percentage }.average().toFloat() else 0f
-        val overallPass = if (totalAttempts > 0) (attempts.count { it.percentage >= 60f }.toFloat() / totalAttempts.toFloat()) * 100f else 0f
-        val topQuiz = quizSummaries.maxByOrNull { it.averageScore }?.quizTitle ?: "No Quizzes Yet"
-
-        TeacherAnalyticsOverview(
-            totalStudentsEvaluated = students.size,
-            totalAttemptsEvaluated = totalAttempts,
-            classAverageScore = classAvg,
-            overallPassRate = overallPass,
-            topPerformingQuiz = topQuiz,
-            studentSummaries = studentSummaries,
-            quizSummaries = quizSummaries,
-            gradeDistributions = gradeDistributions,
-            progressTrends = progressTrends,
-            scoreTrajectory = scoreTrajectory
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TeacherAnalyticsOverview())
 }
 
 private fun String.capitalizeWords(): String =

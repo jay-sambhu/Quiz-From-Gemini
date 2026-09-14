@@ -9,6 +9,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FactCheck
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -86,14 +90,14 @@ fun TeacherPerformanceDashboardTab(
                 BentoStatTile(
                     label = "Class Average",
                     value = "${String.format("%.1f", analyticsOverview.classAverageScore)}%",
-                    icon = Icons.Default.TrendingUp,
+                    icon = Icons.AutoMirrored.Filled.TrendingUp,
                     accentColor = BentoPrimary,
                     modifier = Modifier.weight(1f)
                 )
                 BentoStatTile(
                     label = "Evaluated Tests",
                     value = "${analyticsOverview.totalAttemptsEvaluated}",
-                    icon = Icons.Default.FactCheck,
+                    icon = Icons.AutoMirrored.Filled.FactCheck,
                     accentColor = BentoViolet,
                     modifier = Modifier.weight(1f)
                 )
@@ -128,7 +132,7 @@ fun TeacherPerformanceDashboardTab(
                 val trajectory = analyticsOverview.scoreTrajectory
                 val isPositive = trajectory >= 0f
                 val trajectoryColor = if (isPositive) BentoEmerald else Color(0xFFEF4444)
-                val trajectoryIcon = if (isPositive) Icons.Default.TrendingUp else Icons.Default.TrendingDown
+                val trajectoryIcon = if (isPositive) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown
                 val trajectoryText = if (isPositive) "+${String.format("%.1f", trajectory)}% Growth" else "${String.format("%.1f", trajectory)}% Dip"
 
                 BentoCard(
@@ -210,7 +214,7 @@ fun TeacherPerformanceDashboardTab(
                             label = { Text("Trends", fontSize = 11.sp) },
                             icon = {
                                 if (selectedMode == ChartDisplayMode.TRENDS) {
-                                    Icon(Icons.Default.TrendingUp, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, modifier = Modifier.size(15.dp))
                                 }
                             },
                             modifier = Modifier.testTag("mode_trends_btn")
@@ -533,12 +537,34 @@ private fun StudentPerformanceCard(
                                 fontWeight = FontWeight.Bold
                             )
                             if (student.rank <= 3) {
-                                val badgeText = when (student.rank) {
-                                    1 -> "🥇 #1"
-                                    2 -> "🥈 #2"
-                                    else -> "🥉 #3"
+                                val medalColor = when (student.rank) {
+                                    1 -> Color(0xFFF59E0B)
+                                    2 -> Color(0xFF94A3B8)
+                                    else -> Color(0xFFD97706)
                                 }
-                                Text(badgeText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = medalColor.copy(alpha = 0.15f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.EmojiEvents,
+                                            contentDescription = null,
+                                            tint = medalColor,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = "#${student.rank}",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = medalColor
+                                        )
+                                    }
+                                }
                             }
                         }
                         Text(
@@ -608,7 +634,7 @@ private fun StudentPerformanceCard(
                     modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Send,
+                        imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send alert",
                         tint = BentoPrimary,
                         modifier = Modifier.size(16.dp)
@@ -743,7 +769,7 @@ private fun StudentProgressDetailDialog(
                 onClick = onSendAlert,
                 colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary)
             ) {
-                Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Send Alert")
             }

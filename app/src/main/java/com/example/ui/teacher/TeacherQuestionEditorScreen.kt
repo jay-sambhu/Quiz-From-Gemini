@@ -47,6 +47,7 @@ fun TeacherQuestionEditorScreen(
     val questionsList by viewModel.getQuestionsForQuizSet(quizSet.id).collectAsState(initial = emptyList())
     val isAiSuggesting by viewModel.isAiSuggestingQuestion.collectAsState()
     val aiSuggestionStatus by viewModel.aiSuggestionStatus.collectAsState()
+    val isSavingQuestion by viewModel.isSavingQuestion.collectAsState()
 
     // State for managing active edit or creation mode
     var activeEditingQuestion by remember { mutableStateOf<QuestionEntity?>(null) }
@@ -166,6 +167,7 @@ fun TeacherQuestionEditorScreen(
                     isEditingExisting = activeEditingQuestion != null,
                     isAiSuggesting = isAiSuggesting,
                     aiSuggestionStatus = aiSuggestionStatus,
+                    isSaving = isSavingQuestion,
                     onOpenAiSuggestDialog = { showAiPromptDialog = true },
                     onAutoDistractors = { qText ->
                         viewModel.requestAiDistractorsSuggestion(
@@ -742,6 +744,7 @@ private fun QuestionFormEditor(
     isEditingExisting: Boolean,
     isAiSuggesting: Boolean,
     aiSuggestionStatus: String?,
+    isSaving: Boolean = false,
     onOpenAiSuggestDialog: () -> Unit,
     onAutoDistractors: (String) -> Unit,
     onRequestAiSuggestion: (String, String, QuestionEntity?, (com.example.data.gemini.GeneratedQuizQuestion) -> Unit) -> Unit,
@@ -1079,16 +1082,30 @@ private fun QuestionFormEditor(
                     onSave(updated)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary),
+                enabled = !isSaving,
                 modifier = Modifier
                     .weight(1.5f)
                     .testTag("save_question_button")
             ) {
-                Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = if (isEditingExisting) "Save Changes" else "Add to Set",
-                    fontWeight = FontWeight.Bold
-                )
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Saving...",
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isEditingExisting) "Save Changes" else "Add to Set",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

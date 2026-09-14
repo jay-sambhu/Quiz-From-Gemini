@@ -14,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,6 +59,7 @@ fun StudentDashboardScreen(
     val isCloudConnected by viewModel.isCloudConnected.collectAsState()
     val cloudSyncMessage by viewModel.cloudSyncMessage.collectAsState()
     val progressSummary by viewModel.studentProgressSummary.collectAsState()
+    val isSyncingFirestore by viewModel.isSyncingFirestore.collectAsState()
 
     // Dashboard navigation tabs: 0 = Overview, 1 = Top Students Leaderboard, 2 = Upcoming Quizzes, 3 = Recent Scores
     var selectedDashboardTab by remember { mutableStateOf(0) }
@@ -181,11 +184,35 @@ fun StudentDashboardScreen(
                 },
                 actions = {
                     IconButton(
+                        onClick = { viewModel.syncWithFirestoreCloud() },
+                        enabled = !isSyncingFirestore,
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .testTag("student_sync_cloud_btn")
+                    ) {
+                        if (isSyncingFirestore) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = BentoPrimary
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.CloudSync,
+                                contentDescription = "Sync Cloud",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    IconButton(
                         onClick = onViewHistory,
                         modifier = Modifier
                             .padding(end = 8.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .testTag("student_history_btn")
                     ) {
                         Icon(
                             Icons.Default.History,
@@ -335,7 +362,7 @@ fun StudentDashboardScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
-                                        Icons.Default.MenuBook,
+                                        Icons.AutoMirrored.Filled.MenuBook,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(20.dp)
@@ -1034,7 +1061,7 @@ fun PersonalProgressSummaryCard(
             BentoStatTile(
                 label = "Pass Rate",
                 value = "${String.format("%.0f", summary.passRatePercentage)}%",
-                icon = Icons.Default.TrendingUp,
+                icon = Icons.AutoMirrored.Filled.TrendingUp,
                 accentColor = BentoCyan,
                 subtitle = "${summary.passedQuizzesCount} passed",
                 modifier = Modifier.weight(1f)

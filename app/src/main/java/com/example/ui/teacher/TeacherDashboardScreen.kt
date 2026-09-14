@@ -10,6 +10,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -44,6 +46,8 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
     val aiGenProgress by viewModel.aiGenerationProgress.collectAsState()
     val notificationLogs by viewModel.notificationLogs.collectAsState()
     val analyticsOverview by viewModel.teacherAnalyticsOverview.collectAsState()
+    val deletingQuizSetId by viewModel.deletingQuizSetId.collectAsState()
+    val isSyncingFirestore by viewModel.isSyncingFirestore.collectAsState()
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var hasStartedAiGen by remember { mutableStateOf(false) }
@@ -125,7 +129,22 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Import Quiz", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { viewModel.syncWithFirestoreCloud() },
+                        enabled = !isSyncingFirestore,
+                        modifier = Modifier.testTag("teacher_sync_cloud_btn")
+                    ) {
+                        if (isSyncingFirestore) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = BentoPrimary
+                            )
+                        } else {
+                            Icon(Icons.Default.CloudSync, contentDescription = "Sync Cloud", tint = BentoPrimary)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
             )
         },
@@ -212,7 +231,7 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                 BentoStatTile(
                     label = "Class Avg",
                     value = "${String.format("%.1f", analyticsOverview.classAverageScore)}%",
-                    icon = Icons.Default.TrendingUp,
+                    icon = Icons.AutoMirrored.Filled.TrendingUp,
                     accentColor = BentoPrimary,
                     modifier = Modifier.weight(1f)
                 )
@@ -424,7 +443,7 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.Assignment,
+                                            imageVector = Icons.AutoMirrored.Filled.Assignment,
                                             contentDescription = null,
                                             tint = BentoViolet,
                                             modifier = Modifier.size(24.dp)
@@ -471,9 +490,18 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
 
                                     IconButton(
                                         onClick = { viewModel.deleteQuizSet(quizSet.id) },
+                                        enabled = deletingQuizSetId != quizSet.id,
                                         modifier = Modifier.testTag("delete_quiz_btn_${quizSet.id}")
                                     ) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = BentoRose)
+                                        if (deletingQuizSetId == quizSet.id) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                strokeWidth = 2.dp,
+                                                color = BentoRose
+                                            )
+                                        } else {
+                                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = BentoRose)
+                                        }
                                     }
                                 }
 
@@ -528,7 +556,7 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                                     ) {
                                         Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("✨ AI", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        Text("AI Suggest", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -880,7 +908,7 @@ fun CreateQuizModalDialog(
                                         ) {
                                             Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text("✨ AI Suggest", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text("AI Suggest", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -906,7 +934,7 @@ fun CreateQuizModalDialog(
                                     ) {
                                         Icon(Icons.Default.Psychology, contentDescription = null, modifier = Modifier.size(14.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("✨ Auto-Generate Choices & Distractors", fontSize = 11.sp)
+                                        Text("Auto-Generate Choices & Distractors", fontSize = 11.sp)
                                     }
                                 }
 

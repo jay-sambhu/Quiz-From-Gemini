@@ -342,7 +342,7 @@ class GeminiApiKeyManager(private val context: Context? = null) {
 
         setActiveKeyIndex(nextIndex)
 
-        val cycleMsg = "Rotated active key: ${maskKey(previousKey)} ➔ ${maskKey(newKey)} (${reason})"
+        val cycleMsg = "Rotated active key: ${maskKey(previousKey)} -> ${maskKey(newKey)} (${reason})"
         _rateLimitEventMessage.value = cycleMsg
         Log.w(TAG, cycleMsg)
 

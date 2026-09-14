@@ -376,6 +376,25 @@ class QuizRepository(
         return attempt
     }
 
+    /**
+     * Retrieves completed quizzes and scores for a student from Firestore, ordered chronologically.
+     * Falls back to local database if network/Firestore is unreachable.
+     */
+    suspend fun fetchStudentAttemptsFromFirestore(studentId: String): List<QuizAttemptEntity> {
+        val firestoreAttempts = try {
+            firestoreManager?.fetchStudentAttemptsFromFirestore(studentId)
+        } catch (e: Exception) {
+            Log.w("QuizRepository", "Failed to fetch student attempts from Firestore: ${e.message}")
+            null
+        }
+
+        return if (!firestoreAttempts.isNullOrEmpty()) {
+            firestoreAttempts
+        } else {
+            quizDao.getAttemptsForStudent(studentId).firstOrNull() ?: emptyList()
+        }
+    }
+
     suspend fun syncAllDataToFirestore(
         users: List<UserEntity>,
         categories: List<CategoryEntity>,
