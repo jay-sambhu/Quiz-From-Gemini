@@ -72,6 +72,16 @@ class QuizRepository(
         return firestoreManager?.updateUserProfilePhotoUrl(userId, photoUrl) ?: false
     }
 
+    suspend fun updateUserProfileDetails(
+        userId: String,
+        name: String,
+        preferredSubject: String,
+        notificationsEnabled: Boolean
+    ): Boolean {
+        quizDao.updateUserProfileDetails(userId, name, preferredSubject, notificationsEnabled)
+        return firestoreManager?.updateUserProfileDetails(userId, name, preferredSubject, notificationsEnabled) ?: false
+    }
+
     // --- Categories ---
     suspend fun createCategory(name: String, description: String, iconName: String, colorHex: String) {
         val category = CategoryEntity(

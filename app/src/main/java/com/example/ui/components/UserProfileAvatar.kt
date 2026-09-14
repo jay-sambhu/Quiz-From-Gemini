@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -33,9 +35,10 @@ import com.example.ui.theme.BentoViolet
 
 /**
  * Reusable user profile avatar component with support for:
- * - Loaded image from URI (captured camera photo or local file)
+ * - Loaded image from URI (AI generated avatar, captured camera photo, or local file)
  * - Fallback to user initials
- * - Optional camera capture badge button
+ * - Interactive avatar click
+ * - Optional camera or AI badge button
  */
 @Composable
 fun UserProfileAvatar(
@@ -45,12 +48,23 @@ fun UserProfileAvatar(
     size: Dp = 68.dp,
     backgroundColor: Color = BentoViolet,
     showCameraBadge: Boolean = false,
-    onCameraClick: (() -> Unit)? = null
+    badgeIcon: ImageVector = Icons.Default.PhotoCamera,
+    badgeContentDescription: String = "Edit Profile Avatar",
+    onCameraClick: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null
 ) {
     val initial = name.trim().take(1).uppercase().ifEmpty { "U" }
 
     Box(
-        modifier = modifier.size(size),
+        modifier = modifier
+            .size(size)
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .clip(CircleShape)
+                        .clickable { onClick() }
+                } else Modifier
+            ),
         contentAlignment = Alignment.Center
     ) {
         if (!photoUrl.isNullOrBlank()) {
@@ -85,8 +99,9 @@ fun UserProfileAvatar(
             }
         }
 
-        // Camera overlay badge
-        if (showCameraBadge && onCameraClick != null) {
+        // Overlay action badge (Camera or AI Sparkle)
+        if (showCameraBadge && (onCameraClick != null || onClick != null)) {
+            val badgeAction = onCameraClick ?: onClick
             Surface(
                 shape = CircleShape,
                 color = BentoPrimary,
@@ -96,7 +111,7 @@ fun UserProfileAvatar(
                     .offset(x = 2.dp, y = 2.dp)
                     .size((size * 0.38f).coerceAtLeast(26.dp))
                     .clip(CircleShape)
-                    .clickable { onCameraClick() }
+                    .clickable { badgeAction?.invoke() }
                     .testTag("avatar_camera_badge_btn")
             ) {
                 Box(
@@ -104,8 +119,8 @@ fun UserProfileAvatar(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     Icon(
-                        imageVector = Icons.Default.PhotoCamera,
-                        contentDescription = "Capture Profile Photo",
+                        imageVector = badgeIcon,
+                        contentDescription = badgeContentDescription,
                         tint = Color.White,
                         modifier = Modifier.size((size * 0.22f).coerceAtLeast(14.dp))
                     )

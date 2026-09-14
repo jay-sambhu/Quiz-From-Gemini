@@ -64,6 +64,7 @@ fun UserSettingsScreen(
 
     var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
     var showPhotoSourceDialog by remember { mutableStateOf(false) }
+    var showAvatarStudioDialog by remember { mutableStateOf(false) }
     var showPermissionRationale by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -218,14 +219,17 @@ fun UserSettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Interactive Avatar with Camera Badge
+                        // Interactive Avatar with AI/Camera Badge
                         UserProfileAvatar(
                             name = user.name,
                             photoUrl = user.photoUrl.ifBlank { null },
                             size = 88.dp,
                             backgroundColor = BentoViolet,
                             showCameraBadge = true,
-                            onCameraClick = { showPhotoSourceDialog = true },
+                            badgeIcon = Icons.Default.AutoAwesome,
+                            badgeContentDescription = "Open AI Avatar Studio",
+                            onCameraClick = { showAvatarStudioDialog = true },
+                            onClick = { showAvatarStudioDialog = true },
                             modifier = Modifier.testTag("user_profile_avatar")
                         )
 
@@ -270,6 +274,24 @@ fun UserSettingsScreen(
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
+
+                        // Primary AI Avatar Studio Button
+                        Button(
+                            onClick = { showAvatarStudioDialog = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("open_ai_avatar_studio_btn"),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (user.role == UserRole.TEACHER) BentoAmber else BentoViolet
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("AI Avatar Studio & Gallery", fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         // Camera Capture & Upload Action Buttons
                         Row(
@@ -702,12 +724,28 @@ fun UserSettingsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Capture a fresh photo using your device camera or pick an existing image from your gallery. The image URI will be stored in your Cloud Firestore profile document.",
+                        "Generate a unique AI character avatar, capture a fresh photo with your camera, or pick an existing image from your gallery.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Button(
+                        onClick = {
+                            showPhotoSourceDialog = false
+                            showAvatarStudioDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = BentoViolet),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dialog_ai_avatar_studio_btn"),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Generate / Select AI Avatar", fontWeight = FontWeight.Bold)
+                    }
 
                     OutlinedButton(
                         onClick = {
@@ -764,6 +802,19 @@ fun UserSettingsScreen(
                 TextButton(onClick = { showPhotoSourceDialog = false }) {
                     Text("Close")
                 }
+            }
+        )
+    }
+
+    // AI Avatar Studio & User Profile Dialog
+    if (showAvatarStudioDialog && currentUser != null) {
+        UserProfileAvatarDialog(
+            user = currentUser!!,
+            viewModel = viewModel,
+            onDismiss = { showAvatarStudioDialog = false },
+            onLaunchCamera = { launchCameraFlow() },
+            onLaunchGallery = {
+                pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             }
         )
     }

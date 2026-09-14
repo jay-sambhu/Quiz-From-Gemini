@@ -1,5 +1,9 @@
 package com.example.ui.student
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -25,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +66,17 @@ fun StudentDashboardScreen(
     val cloudSyncMessage by viewModel.cloudSyncMessage.collectAsState()
     val progressSummary by viewModel.studentProgressSummary.collectAsState()
     val isSyncingFirestore by viewModel.isSyncingFirestore.collectAsState()
+
+    val context = LocalContext.current
+    var showProfileAvatarDialog by remember { mutableStateOf(false) }
+
+    val pickMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.updateUserProfilePhoto(uri.toString())
+        }
+    }
 
     // Dashboard navigation tabs: 0 = Overview, 1 = Top Students Leaderboard, 2 = Upcoming Quizzes, 3 = Recent Scores
     var selectedDashboardTab by remember { mutableStateOf(0) }
@@ -164,22 +180,38 @@ fun StudentDashboardScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { showProfileAvatarDialog = true }
+                    ) {
                         UserProfileAvatar(
                             name = currentUser?.name ?: "Student",
                             photoUrl = currentUser?.photoUrl?.ifBlank { null },
                             size = 40.dp,
-                            backgroundColor = BentoViolet
+                            backgroundColor = BentoViolet,
+                            showCameraBadge = true,
+                            badgeIcon = Icons.Default.AutoAwesome,
+                            badgeContentDescription = "Customize AI Profile Avatar",
+                            onClick = { showProfileAvatarDialog = true }
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text(
-                                text = "Hello, ${currentUser?.name ?: "Student"}",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Hello, ${currentUser?.name ?: "Student"}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = BentoPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
@@ -458,6 +490,77 @@ fun StudentDashboardScreen(
             // TAB 0: OVERVIEW (Progress Summary + Top Students + Previews)
             // -------------------------------------------------------------
             if (selectedDashboardTab == 0) {
+                // 0. AI Profile Avatar Studio Banner Card
+                item {
+                    Card(
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = BentoSurface
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, BentoViolet.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                            .clickable { showProfileAvatarDialog = true }
+                            .testTag("student_ai_avatar_banner")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            UserProfileAvatar(
+                                name = currentUser?.name ?: "Student",
+                                photoUrl = currentUser?.photoUrl?.ifBlank { null },
+                                size = 52.dp,
+                                backgroundColor = BentoViolet,
+                                showCameraBadge = true,
+                                badgeIcon = Icons.Default.AutoAwesome
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "AI Profile Avatar Studio",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = BentoViolet.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = "STUDIO",
+                                            color = BentoViolet,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "Generate with Gemini or choose curated student character presets",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            FilledTonalButton(
+                                onClick = { showProfileAvatarDialog = true },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.testTag("student_open_avatar_studio_btn")
+                            ) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Customize", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
                 // 1. Personal Progress Summary Card (Hero Bento Card)
                 item {
                     PersonalProgressSummaryCard(
@@ -1004,6 +1107,21 @@ fun StudentDashboardScreen(
             }
             }
         }
+    }
+
+    // AI Avatar & Profile Studio Dialog
+    if (showProfileAvatarDialog && currentUser != null) {
+        UserProfileAvatarDialog(
+            user = currentUser!!,
+            viewModel = viewModel,
+            onDismiss = { showProfileAvatarDialog = false },
+            onLaunchCamera = {
+                pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            onLaunchGallery = {
+                pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }
+        )
     }
 }
 

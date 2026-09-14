@@ -30,6 +30,9 @@ interface QuizDao {
     @Query("UPDATE users SET photoUrl = :photoUrl WHERE id = :userId")
     suspend fun updateUserPhotoUrl(userId: String, photoUrl: String)
 
+    @Query("UPDATE users SET name = :name, preferredSubject = :subject, emailNotificationsEnabled = :notificationsEnabled WHERE id = :userId")
+    suspend fun updateUserProfileDetails(userId: String, name: String, subject: String, notificationsEnabled: Boolean)
+
 
     // --- Categories ---
     @Query("SELECT * FROM categories ORDER BY name ASC")

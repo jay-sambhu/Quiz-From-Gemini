@@ -520,6 +520,31 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
         }
     }
 
+    suspend fun updateUserProfileDetails(
+        userId: String,
+        name: String,
+        preferredSubject: String,
+        notificationsEnabled: Boolean
+    ): Boolean {
+        val db = firestore ?: return false
+        return try {
+            val payload = mapOf(
+                "name" to name,
+                "preferredSubject" to preferredSubject,
+                "emailNotificationsEnabled" to notificationsEnabled,
+                "updatedAt" to System.currentTimeMillis()
+            )
+            db.collection(COLLECTION_USERS).document(userId)
+                .set(payload, SetOptions.merge())
+                .awaitTask()
+            Log.d(TAG, "Successfully updated user profile details in Firestore: $userId -> name=$name, subject=$preferredSubject")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Error updating user profile details in Firestore: ${e.message}")
+            false
+        }
+    }
+
     // --- Category Operations in Firestore ---
     suspend fun saveCategory(category: CategoryEntity) {
         val db = firestore ?: return

@@ -1,9 +1,11 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.avatar.AiAvatarGeneratorService
 import com.example.data.firestore.FirestoreManager
 import com.example.data.firestore.SystemLogItem
 import com.example.data.gemini.GeminiApiKeyManager
@@ -933,6 +935,96 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                 emailNotificationsEnabled = emailNotificationsEnabled
             )
             _uiEventMessage.value = "Preferences saved to Firestore!"
+        }
+    }
+
+    private val _isGeneratingAiAvatar = MutableStateFlow(false)
+    val isGeneratingAiAvatar: StateFlow<Boolean> = _isGeneratingAiAvatar.asStateFlow()
+
+    private val _aiAvatarStatusMessage = MutableStateFlow<String?>(null)
+    val aiAvatarStatusMessage: StateFlow<String?> = _aiAvatarStatusMessage.asStateFlow()
+
+    private val aiAvatarService by lazy {
+        AiAvatarGeneratorService.getInstance(geminiApiKeyManager)
+    }
+
+    fun generateAiAvatar(
+        context: Context,
+        prompt: String,
+        style: String,
+        onSuccess: (String) -> Unit
+    ) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            _isGeneratingAiAvatar.value = true
+            _aiAvatarStatusMessage.value = "Initializing AI Avatar Engine..."
+            try {
+                val result = aiAvatarService.generateAvatar(
+                    context = context,
+                    prompt = prompt,
+                    style = style,
+                    role = user.role,
+                    onStatusUpdate = { _aiAvatarStatusMessage.value = it }
+                )
+                result.onSuccess { uri ->
+                    _aiAvatarStatusMessage.value = "Avatar generated successfully!"
+                    selectAndApplyAvatar(uri)
+                    onSuccess(uri)
+                }.onFailure { err ->
+                    _uiEventMessage.value = "Avatar generation error: ${err.localizedMessage}"
+                }
+            } catch (e: Exception) {
+                _uiEventMessage.value = "Avatar generation failed: ${e.localizedMessage}"
+            } finally {
+                _isGeneratingAiAvatar.value = false
+            }
+        }
+    }
+
+    fun selectAndApplyAvatar(avatarUri: String) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            _isUpdatingProfilePhoto.value = true
+            try {
+                repository.updateUserProfilePhotoUrl(user.id, avatarUri)
+                _currentUser.value = user.copy(photoUrl = avatarUri)
+                firestoreManager.logSystemEvent(
+                    title = "Profile Avatar Updated",
+                    description = "Updated profile avatar for ${user.role.name}: $avatarUri",
+                    category = "USER_PROFILE",
+                    severity = "SUCCESS",
+                    actor = user.name
+                )
+                _uiEventMessage.value = "Profile avatar updated and saved!"
+            } catch (e: Exception) {
+                _uiEventMessage.value = "Failed to update profile avatar: ${e.localizedMessage}"
+            } finally {
+                _isUpdatingProfilePhoto.value = false
+            }
+        }
+    }
+
+    fun updateUserProfile(name: String, preferredSubject: String, emailNotificationsEnabled: Boolean) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            try {
+                repository.updateUserProfileDetails(user.id, name, preferredSubject, emailNotificationsEnabled)
+                _currentUser.value = user.copy(
+                    name = name,
+                    preferredSubject = preferredSubject,
+                    emailNotificationsEnabled = emailNotificationsEnabled
+                )
+                firestoreManager.logSystemEvent(
+                    title = "Profile Updated",
+                    description = "Updated user profile details for ${user.email}",
+                    category = "USER_PROFILE",
+                    severity = "SUCCESS",
+                    actor = name
+                )
+                _uiEventMessage.value = "Profile details successfully saved!"
+            } catch (e: Exception) {
+                _uiEventMessage.value = "Failed to update profile: ${e.localizedMessage}"
+            }
         }
     }
 

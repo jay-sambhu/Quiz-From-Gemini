@@ -1,5 +1,8 @@
 package com.example.ui.teacher
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -55,6 +58,15 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
     var selectedQuizForQuestions by remember { mutableStateOf<QuizSetEntity?>(null) }
     var showImportCsvDialog by remember { mutableStateOf(false) }
     var targetQuizForImport by remember { mutableStateOf<QuizSetEntity?>(null) }
+    var showProfileAvatarDialog by remember { mutableStateOf(false) }
+
+    val pickMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.updateUserProfilePhoto(uri.toString())
+        }
+    }
 
     LaunchedEffect(isGeneratingAi) {
         if (isGeneratingAi) {
@@ -144,6 +156,17 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                             Icon(Icons.Default.CloudSync, contentDescription = "Sync Cloud", tint = BentoPrimary)
                         }
                     }
+                    UserProfileAvatar(
+                        name = currentUser?.name ?: "Teacher",
+                        photoUrl = currentUser?.photoUrl?.ifBlank { null },
+                        size = 36.dp,
+                        backgroundColor = BentoAmber,
+                        showCameraBadge = true,
+                        badgeIcon = Icons.Default.AutoAwesome,
+                        badgeContentDescription = "Teacher AI Avatar Studio",
+                        onClick = { showProfileAvatarDialog = true },
+                        modifier = Modifier.testTag("teacher_topbar_avatar")
+                    )
                     Spacer(modifier = Modifier.width(4.dp))
                 }
             )
@@ -186,28 +209,46 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                             .padding(16.dp),
                         contentAlignment = Alignment.BottomStart
                     ) {
-                        Column {
-                            BentoPillTag(
-                                text = "Faculty Studio",
-                                containerColor = BentoViolet,
-                                contentColor = Color.White,
-                                icon = Icons.Default.AutoAwesome
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Welcome, ${currentUser?.name ?: "Professor"}",
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "Create tests or leverage Gemini AI to generate question sets instantly.",
-                                color = Color.White.copy(alpha = 0.85f),
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                BentoPillTag(
+                                    text = "Faculty Studio",
+                                    containerColor = BentoViolet,
+                                    contentColor = Color.White,
+                                    icon = Icons.Default.AutoAwesome
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Welcome, ${currentUser?.name ?: "Professor"}",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "Create tests or leverage Gemini AI to generate question sets instantly.",
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            UserProfileAvatar(
+                                name = currentUser?.name ?: "Teacher",
+                                photoUrl = currentUser?.photoUrl?.ifBlank { null },
+                                size = 52.dp,
+                                backgroundColor = BentoAmber,
+                                showCameraBadge = true,
+                                badgeIcon = Icons.Default.AutoAwesome,
+                                badgeContentDescription = "Teacher AI Avatar Studio",
+                                onClick = { showProfileAvatarDialog = true },
+                                modifier = Modifier.testTag("teacher_hero_avatar")
                             )
                         }
                     }
@@ -675,6 +716,20 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
             onImportSuccess = { quizTitle, count ->
                 showImportCsvDialog = false
                 targetQuizForImport = null
+            }
+        )
+    }
+
+    if (showProfileAvatarDialog && currentUser != null) {
+        UserProfileAvatarDialog(
+            user = currentUser!!,
+            viewModel = viewModel,
+            onDismiss = { showProfileAvatarDialog = false },
+            onLaunchCamera = {
+                pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            onLaunchGallery = {
+                pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             }
         )
     }

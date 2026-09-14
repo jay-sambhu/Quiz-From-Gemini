@@ -28,4 +28,6 @@ val DarkSurfaceVariant = Color(0xFF334155)
 // Border Tokens
 val BentoBorderLight = Color(0xFFE2E8F0)
 val BentoBorderDark = Color(0xFF475569)
+val BentoBorder = BentoBorderLight
+val BentoSurface = LightSurfaceVariant
 
