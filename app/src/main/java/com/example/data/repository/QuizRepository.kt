@@ -44,7 +44,10 @@ class QuizRepository(
             }
             return remoteRole
         }
-        return if (userId.isNotBlank()) quizDao.getUserById(userId)?.role else null
+        val localById = if (userId.isNotBlank()) quizDao.getUserById(userId)?.role else null
+        if (localById != null) return localById
+        val localByEmail = if (!email.isNullOrBlank()) quizDao.getUserByEmail(email)?.role else null
+        return localByEmail
     }
 
     suspend fun storeUserRole(

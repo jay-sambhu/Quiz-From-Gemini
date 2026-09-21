@@ -15,6 +15,9 @@ interface QuizDao {
     @Query("SELECT * FROM users WHERE id = :id LIMIT 1")
     suspend fun getUserById(id: String): UserEntity?
 
+    @Query("SELECT * FROM users WHERE LOWER(email) = LOWER(:email) LIMIT 1")
+    suspend fun getUserByEmail(email: String): UserEntity?
+
     @Query("SELECT * FROM users WHERE role = :role")
     fun getUsersByRole(role: UserRole): Flow<List<UserEntity>>
 

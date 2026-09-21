@@ -59,6 +59,7 @@ import java.util.Date
 import java.util.Locale
 
 enum class ChartEngine {
+    COMPOSE_CHARTS,
     RECHARTS,
     NATIVE
 }
@@ -82,7 +83,7 @@ fun StudentScoreImprovementChart(
         return
     }
 
-    var selectedEngine by remember { mutableStateOf(ChartEngine.RECHARTS) }
+    var selectedEngine by remember { mutableStateOf(ChartEngine.COMPOSE_CHARTS) }
     val isDarkTheme = MaterialTheme.colorScheme.background.red < 0.5f
 
     // Calculate score improvement metrics
@@ -151,6 +152,12 @@ fun StudentScoreImprovementChart(
                         .padding(3.dp),
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    ChartEnginePill(
+                        label = "Compose",
+                        isSelected = selectedEngine == ChartEngine.COMPOSE_CHARTS,
+                        testTag = "chart_engine_toggle_compose_charts",
+                        onClick = { selectedEngine = ChartEngine.COMPOSE_CHARTS }
+                    )
                     ChartEnginePill(
                         label = "Recharts",
                         isSelected = selectedEngine == ChartEngine.RECHARTS,
@@ -292,16 +299,25 @@ fun StudentScoreImprovementChart(
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (isDarkTheme) Color(0xFF1E293B) else Color(0xFFF8FAFC))
             ) {
-                if (selectedEngine == ChartEngine.RECHARTS) {
-                    RechartsLineChartWebView(
-                        chronologicalAttempts = chronologicalAttempts,
-                        isDarkTheme = isDarkTheme
-                    )
-                } else {
-                    NativeComposeLineChart(
-                        chronologicalAttempts = chronologicalAttempts,
-                        isDarkTheme = isDarkTheme
-                    )
+                when (selectedEngine) {
+                    ChartEngine.COMPOSE_CHARTS -> {
+                        ComposeChartsEngineView(
+                            chronologicalAttempts = chronologicalAttempts,
+                            isDarkTheme = isDarkTheme
+                        )
+                    }
+                    ChartEngine.RECHARTS -> {
+                        RechartsLineChartWebView(
+                            chronologicalAttempts = chronologicalAttempts,
+                            isDarkTheme = isDarkTheme
+                        )
+                    }
+                    ChartEngine.NATIVE -> {
+                        NativeComposeLineChart(
+                            chronologicalAttempts = chronologicalAttempts,
+                            isDarkTheme = isDarkTheme
+                        )
+                    }
                 }
             }
 
@@ -390,6 +406,98 @@ private fun ChartLegendIndicator(
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun ComposeChartsEngineView(
+    chronologicalAttempts: List<QuizAttemptEntity>,
+    isDarkTheme: Boolean
+) {
+    val dateFormatter = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
+    val chartValues = remember(chronologicalAttempts) {
+        chronologicalAttempts.map { it.percentage.toDouble().coerceIn(0.0, 100.0) }
+    }
+    val chartLabels = remember(chronologicalAttempts) {
+        chronologicalAttempts.mapIndexed { index, attempt ->
+            if (chronologicalAttempts.size <= 6) {
+                dateFormatter.format(Date(attempt.completedAt))
+            } else {
+                "Q${index + 1}"
+            }
+        }
+    }
+
+    val lineSeries = remember(chartValues, isDarkTheme) {
+        listOf(
+            ir.ehsannarmani.compose_charts.models.Line(
+                label = "Score (%)",
+                values = chartValues,
+                color = androidx.compose.ui.graphics.SolidColor(BentoPrimary),
+                firstGradientFillColor = BentoPrimary.copy(alpha = 0.35f),
+                secondGradientFillColor = BentoPrimary.copy(alpha = 0.02f),
+                drawStyle = ir.ehsannarmani.compose_charts.models.DrawStyle.Stroke(width = 3.dp),
+                curvedEdges = true,
+                dotProperties = ir.ehsannarmani.compose_charts.models.DotProperties(
+                    enabled = true,
+                    radius = 5.dp,
+                    color = androidx.compose.ui.graphics.SolidColor(BentoPrimary),
+                    strokeWidth = 2.dp,
+                    strokeColor = androidx.compose.ui.graphics.SolidColor(if (isDarkTheme) Color(0xFF1E293B) else Color.White)
+                ),
+                popupProperties = ir.ehsannarmani.compose_charts.models.PopupProperties(
+                    enabled = true,
+                    containerColor = BentoPrimary,
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    contentBuilder = { _, _, value -> "${String.format(Locale.US, "%.0f", value)}%" }
+                )
+            )
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = 16.dp, bottom = 8.dp, start = 8.dp, end = 12.dp)
+    ) {
+        ir.ehsannarmani.compose_charts.LineChart(
+            modifier = Modifier.fillMaxSize(),
+            data = lineSeries,
+            minValue = 0.0,
+            maxValue = 100.0,
+            labelProperties = ir.ehsannarmani.compose_charts.models.LabelProperties(
+                enabled = true,
+                labels = chartLabels,
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            ),
+            indicatorProperties = ir.ehsannarmani.compose_charts.models.HorizontalIndicatorProperties(
+                enabled = true,
+                count = ir.ehsannarmani.compose_charts.models.IndicatorCount.CountBased(5),
+                contentBuilder = { "${it.toInt()}%" }
+            ),
+            gridProperties = ir.ehsannarmani.compose_charts.models.GridProperties(
+                enabled = true,
+                xAxisProperties = ir.ehsannarmani.compose_charts.models.GridProperties.AxisProperties(
+                    enabled = true,
+                    color = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)),
+                    thickness = 1.dp
+                ),
+                yAxisProperties = ir.ehsannarmani.compose_charts.models.GridProperties.AxisProperties(
+                    enabled = true,
+                    color = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)),
+                    thickness = 1.dp
+                )
+            ),
+            labelHelperProperties = ir.ehsannarmani.compose_charts.models.LabelHelperProperties(enabled = false)
         )
     }
 }

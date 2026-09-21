@@ -564,3 +564,210 @@ fun PerfectScoreCelebrationBadge(
         }
     }
 }
+
+/**
+ * Animated celebratory header badge displayed when a student successfully passes a quiz (>= 60%).
+ * Features a dynamic emerald-cyan gradient halo, spring bounce entry, and confetti blast trigger.
+ */
+@Composable
+fun SuccessCelebrationBadge(
+    score: Int,
+    totalQuestions: Int,
+    percentage: Float,
+    modifier: Modifier = Modifier,
+    onReplayCelebration: () -> Unit = {}
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "success_halo")
+
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "success_halo_pulse"
+    )
+
+    var isAppeared by remember { mutableStateOf(false) }
+    val entryScale by animateFloatAsState(
+        targetValue = if (isAppeared) 1f else 0.5f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "success_entry_bounce"
+    )
+
+    LaunchedEffect(Unit) {
+        delay(60)
+        isAppeared = true
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .scale(entryScale)
+            .border(
+                width = 2.dp,
+                brush = Brush.linearGradient(
+                    listOf(
+                        Color(0xFF10B981), // Emerald
+                        Color(0xFF06B6D4), // Cyan
+                        Color(0xFF3B82F6), // Blue
+                        Color(0xFF10B981)
+                    )
+                ),
+                shape = RoundedCornerShape(26.dp)
+            ),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFECFDF5) // Very soft fresh mint background
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            // Soft emerald glow background
+            Canvas(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(26.dp))
+            ) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(
+                            Color(0xFF10B981).copy(alpha = 0.22f * pulseScale),
+                            Color(0xFF06B6D4).copy(alpha = 0.08f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width / 2, size.height * 0.35f),
+                        radius = size.width * 0.60f * pulseScale
+                    )
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Success Trophy Icon with Pulsing Halo
+                Box(
+                    modifier = Modifier.size(96.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(86.dp * pulseScale)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(
+                                        Color(0xFF10B981).copy(alpha = 0.35f),
+                                        Color(0xFF06B6D4).copy(alpha = 0.12f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        Color(0xFF34D399),
+                                        Color(0xFF10B981),
+                                        Color(0xFF059669)
+                                    )
+                                )
+                            )
+                            .border(2.dp, Color(0xFFD1FAE5), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EmojiEvents,
+                            contentDescription = "Quiz Passed Trophy",
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Success Pill Tag
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color(0xFFD1FAE5),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = Color(0xFF047857),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "QUIZ PASSED • ${String.format("%.0f", percentage)}% ACCURACY",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF065F46),
+                            letterSpacing = 0.8.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Congratulations!",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF064E3B)
+                )
+
+                Text(
+                    text = "You successfully passed with $score out of $totalQuestions correct answers! Great progress!",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF065F46),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Replay Confetti Effect Button
+                OutlinedButton(
+                    onClick = onReplayCelebration,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFF047857)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.6f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Blast Confetti Again",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+    }
+}
+

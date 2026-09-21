@@ -46,6 +46,7 @@ import com.example.data.local.entities.QuizSetEntity
 import com.example.ui.QuizViewModel
 import com.example.ui.StudentProgressSummary
 import com.example.ui.components.*
+import com.example.ui.student.components.StudentPerformanceTrendCard
 import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -617,6 +618,17 @@ fun StudentDashboardScreen(
                     )
                 }
 
+                // 1.5 Performance Trend Chart on Student Profile
+                item {
+                    StudentPerformanceTrendCard(
+                        attempts = studentAttempts,
+                        title = "Performance Trend Over Time",
+                        subtitle = "Continuous score history & trajectory powered by Compose-Charts",
+                        onTakeQuiz = { selectedDashboardTab = 2 },
+                        onAttemptClick = { onViewHistory() }
+                    )
+                }
+
                 // 2. Curriculum Subjects & Categories
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -722,7 +734,7 @@ fun StudentDashboardScreen(
                     TopStudentsLeaderboardComponent(
                         viewModel = viewModel,
                         isCompactPreview = true,
-                        onViewFullLeaderboard = { selectedDashboardTab = 1 },
+                        onViewFullLeaderboard = { onViewLeaderboard?.invoke() ?: run { selectedDashboardTab = 1 } },
                         onTakeQuizToClimb = { selectedDashboardTab = 2 }
                     )
                 }
@@ -1124,6 +1136,17 @@ fun StudentDashboardScreen(
                             }
                         }
                     }
+                }
+
+                // Performance Trend Chart in Scores Tab
+                item {
+                    StudentPerformanceTrendCard(
+                        attempts = studentAttempts,
+                        title = "Score Trajectory & History",
+                        subtitle = "Continuous assessment trajectory powered by Compose-Charts",
+                        onTakeQuiz = { selectedDashboardTab = 2 },
+                        onAttemptClick = { onViewHistory() }
+                    )
                 }
 
                 item {

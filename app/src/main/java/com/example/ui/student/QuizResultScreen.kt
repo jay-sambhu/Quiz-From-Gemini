@@ -106,12 +106,24 @@ fun QuizResultScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Celebratory Perfect Score Banner
+                // Celebratory Badge: Flawless/Perfect or Passed Success
                 if (isPerfectScore) {
                     PerfectScoreCelebrationBadge(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("perfect_score_celebration_badge"),
+                        onReplayCelebration = {
+                            celebrationTriggerKey++
+                        }
+                    )
+                } else if (isPassed) {
+                    SuccessCelebrationBadge(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("success_celebration_badge"),
+                        score = attempt.score,
+                        totalQuestions = attempt.totalQuestions,
+                        percentage = attempt.percentage,
                         onReplayCelebration = {
                             celebrationTriggerKey++
                         }
@@ -284,13 +296,15 @@ fun QuizResultScreen(
             }
         }
 
-        // Celebratory Confetti Animation Layer on top of Screen
-        if (isPerfectScore) {
+        // Celebratory Confetti Animation Layer on top of Screen when student successfully completes a quiz
+        if (isPassed) {
             CelebrationConfettiOverlay(
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("celebration_confetti_overlay"),
-                triggerKey = celebrationTriggerKey
+                triggerKey = celebrationTriggerKey,
+                particleCount = if (isPerfectScore) 150 else 105,
+                burstDurationMs = if (isPerfectScore) 5500L else 4200L
             )
         }
     }

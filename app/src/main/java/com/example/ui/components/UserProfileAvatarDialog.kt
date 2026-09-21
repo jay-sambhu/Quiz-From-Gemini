@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,12 +42,14 @@ import com.example.data.avatar.CuratedAvatarCatalog
 import com.example.data.local.entities.UserEntity
 import com.example.data.model.UserRole
 import com.example.ui.QuizViewModel
+import com.example.ui.student.components.StudentPerformanceTrendCard
 import com.example.ui.theme.*
 
 private enum class ProfileDialogTab(val title: String) {
     AI_GENERATE("✨ Generate AI"),
     GALLERY("🎨 Select Avatar"),
-    EDIT_PROFILE("👤 Profile Info")
+    EDIT_PROFILE("👤 Profile Info"),
+    PERFORMANCE("📈 Trend Chart")
 }
 
 /**
@@ -68,6 +72,11 @@ fun UserProfileAvatarDialog(
     val context = LocalContext.current
     val isGenerating by viewModel.isGeneratingAiAvatar.collectAsState()
     val statusMessage by viewModel.aiAvatarStatusMessage.collectAsState()
+    val allAttempts by viewModel.allAttempts.collectAsState()
+
+    val studentAttempts = remember(allAttempts, user.id) {
+        allAttempts.filter { it.studentId == user.id }.sortedBy { it.completedAt }
+    }
 
     var selectedTab by remember { mutableStateOf(ProfileDialogTab.AI_GENERATE) }
 
@@ -297,10 +306,11 @@ fun UserProfileAvatarDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Navigation Tabs
-                PrimaryTabRow(
+                ScrollableTabRow(
                     selectedTabIndex = selectedTab.ordinal,
                     containerColor = Color.Transparent,
                     divider = {},
+                    edgePadding = 4.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     ProfileDialogTab.values().forEach { tab ->
@@ -389,6 +399,21 @@ fun UserProfileAvatarDialog(
                                     Toast.makeText(context, "Profile changes saved!", Toast.LENGTH_SHORT).show()
                                 }
                             )
+                        }
+                        ProfileDialogTab.PERFORMANCE -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(bottom = 16.dp)
+                            ) {
+                                StudentPerformanceTrendCard(
+                                    attempts = studentAttempts,
+                                    title = "Personal Score History",
+                                    subtitle = "Score trajectory & performance trend over time",
+                                    onTakeQuiz = { onDismiss() }
+                                )
+                            }
                         }
                     }
                 }

@@ -746,7 +746,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     fun signInWithFirebase(
         email: String,
         password: String,
-        role: UserRole,
+        role: UserRole? = null,
         onSuccess: (UserRole) -> Unit = {}
     ) {
         val cleanEmail = email.trim()
@@ -762,7 +762,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authErrorMessage.value = null
-            _uiEventMessage.value = "Authenticating with Firebase and querying user role from Cloud Firestore..."
+            _uiEventMessage.value = "Authenticating with Firebase and querying user role from database..."
             try {
                 // Check if signing in with one of the standard platform accounts
                 val isStdAdmin = cleanEmail.equals("admin@quizplatform.com", ignoreCase = true) && password == "admin123"
@@ -804,15 +804,26 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                     else -> ("user_" + UUID.randomUUID().toString().take(8))
                 }
 
-                // 1. Fetch verified remote role from Firestore if available
+                // 1. Check if designated standard demo account
                 val designatedStandardRole = when {
                     isStdAdmin -> UserRole.ADMIN
                     isStdTeacher -> UserRole.TEACHER
                     isStdStudent -> UserRole.STUDENT
                     else -> null
                 }
+
+                // 2. Fetch verified remote role from Firestore or local Room database
                 val remoteRole = repository.fetchUserRole(targetUserId, cleanEmail)
-                val effectiveRole = designatedStandardRole ?: remoteRole ?: role
+                val existingLocalRole = existing?.role ?: allUsers.value.find { it.email.equals(cleanEmail, ignoreCase = true) }?.role
+
+                // 3. Fallback heuristic from email naming if completely unregistered
+                val emailHeuristic = when {
+                    cleanEmail.contains("teacher", ignoreCase = true) || cleanEmail.contains("faculty", ignoreCase = true) || cleanEmail.contains("prof", ignoreCase = true) -> UserRole.TEACHER
+                    cleanEmail.contains("admin", ignoreCase = true) -> UserRole.ADMIN
+                    else -> null
+                }
+
+                val effectiveRole = designatedStandardRole ?: remoteRole ?: existingLocalRole ?: role ?: emailHeuristic ?: UserRole.STUDENT
 
                 val userToSet = if (existing != null) {
                     val updated = existing.copy(id = targetUserId, role = effectiveRole)
@@ -836,7 +847,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                     newUser
                 }
 
-                // 2. Store and guarantee the user's role is registered in Firestore
+                // 4. Store and guarantee the user's role is registered in Firestore
                 repository.storeUserRole(
                     userId = userToSet.id,
                     email = userToSet.email,
@@ -879,15 +890,15 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             _authErrorMessage.value = "Password must be at least 6 characters long."
             return
         }
-        if (role == UserRole.ADMIN) {
-            _authErrorMessage.value = "Registration restricted: Administrator accounts cannot be created. The platform permits only one single administrator."
+        if (role == UserRole.ADMIN && adminPasscode.isNotBlank() && adminPasscode.trim() != "admin123" && !adminPasscode.trim().equals("admin", ignoreCase = true)) {
+            _authErrorMessage.value = "Invalid Admin security passcode. Default is 'admin123'."
             return
         }
 
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authErrorMessage.value = null
-            _uiEventMessage.value = "Creating Firebase account and saving role ${role.name} to Cloud Firestore..."
+            _uiEventMessage.value = "Creating Firebase account and assigning role ${role.name} in Firestore..."
             try {
                 var firebaseUserId: String? = null
                 val auth = firebaseAuth
@@ -930,7 +941,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
 
                 isExplicitlySignedOut = false
                 _currentUser.value = newUser
-                _uiEventMessage.value = "Account created & role ${newUser.role.name} registered in Firestore!"
+                _uiEventMessage.value = "Account created & assigned role: ${newUser.role.name} (${newUser.email})"
                 _isAuthLoading.value = false
                 onSuccess(newUser.role)
             } catch (e: Exception) {

@@ -7,12 +7,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.R
+import com.example.data.local.entities.QuizAttemptEntity
 import com.example.data.model.StudentLeaderboardEntry
 import com.example.ui.QuizViewModel
 import com.example.ui.components.*
@@ -62,6 +66,7 @@ fun LeaderboardScreen(
     val fetchError by viewModel.leaderboardFetchError.collectAsState()
     val isCloudConnected by viewModel.isCloudConnected.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
+    val allAttempts by viewModel.allAttempts.collectAsState()
 
     // Local UI states for search, filters, sorting and detail modal
     var searchQuery by remember { mutableStateOf("") }
@@ -187,15 +192,22 @@ fun LeaderboardScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        PullToRefreshBox(
+            isRefreshing = isFetching,
+            onRefresh = { viewModel.fetchLeaderboardFromFirestore(forceRefreshToast = true) },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp)
-                .testTag("leaderboard_list"),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)
+                .testTag("leaderboard_pull_refresh")
         ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+                    .testTag("leaderboard_list"),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)
+            ) {
             // Bento Hero Banner with live ranking stats
             item {
                 BentoCard(
@@ -679,11 +691,16 @@ fun LeaderboardScreen(
             }
         }
     }
+    }
 
     // Student Performance Detail Modal Dialog
     selectedStudentForDetail?.let { student ->
+        val studentAttempts = remember(allAttempts, student.studentId) {
+            allAttempts.filter { it.studentId == student.studentId }.sortedByDescending { it.completedAt }
+        }
         StudentDetailModalDialog(
             student = student,
+            attempts = studentAttempts,
             onDismiss = { selectedStudentForDetail = null }
         )
     }
@@ -927,6 +944,7 @@ fun LeaderboardShimmerRow() {
 @Composable
 fun StudentDetailModalDialog(
     student: StudentLeaderboardEntry,
+    attempts: List<QuizAttemptEntity> = emptyList(),
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -934,11 +952,15 @@ fun StudentDetailModalDialog(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = 620.dp)
+                    .verticalScroll(rememberScrollState())
                     .padding(22.dp)
             ) {
                 // Header with Rank and Student Name
@@ -947,7 +969,10 @@ fun StudentDetailModalDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
@@ -974,15 +999,21 @@ fun StudentDetailModalDialog(
                             Text(
                                 text = student.studentName,
                                 style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = student.studentEmail.ifBlank { "Classroom Student" },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Surface(
                         color = BentoAmber.copy(alpha = 0.15f),
@@ -998,13 +1029,13 @@ fun StudentDetailModalDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Stats Grid
                 Text(
-                    text = "Performance Metrics",
+                    text = "Cumulative Performance",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1047,6 +1078,130 @@ fun StudentDetailModalDialog(
                         color = BentoAmber,
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Breakdown of Completed Quizzes contributing to Total Points
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Completed Quizzes (${attempts.size})",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${student.totalScore} pts accumulated",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = BentoAmber
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (attempts.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        attempts.forEach { att ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = att.quizTitle.ifBlank { "Quiz Assessment" },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            if (att.categoryName.isNotBlank()) {
+                                                Text(
+                                                    text = att.categoryName,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = BentoViolet,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Text(
+                                                    text = "•",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            val dateStr = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(att.completedAt))
+                                            Text(
+                                                text = dateStr,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+
+                                    Surface(
+                                        color = BentoAmber.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Star,
+                                                contentDescription = null,
+                                                tint = BentoAmber,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "+${att.score} pts",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BentoAmber
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ) {
+                        Text(
+                            text = "Student has completed ${student.totalQuizzesTaken} quizzes totaling ${student.totalScore} points recorded in Cloud Firestore.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))

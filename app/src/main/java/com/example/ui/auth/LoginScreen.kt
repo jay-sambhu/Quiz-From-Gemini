@@ -219,26 +219,135 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Role Selection Cards (Clean, readable, zero overlap)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = if (isSignUpMode) "Register as (Student or Teacher):" else "Select Your Access Role:",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+            if (!isSignUpMode) {
+                // Unified Single Login Board Header Banner
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
                     )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Single Login Board",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Automatic Role Detection • Backend-Driven Access",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
 
-                    if (isSignUpMode) {
+                        Text(
+                            text = "Sign in directly with your email and password. The system queries Firebase & Cloud Firestore to automatically route you to your assigned dashboard (Student, Teacher, or Admin).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+                            lineHeight = 18.sp
+                        )
+
+                        // Role Route Indicators (Informative badges)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF2E7D32).copy(alpha = 0.12f),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(Icons.Default.School, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Student", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                }
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF1565C0).copy(alpha = 0.12f),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(Icons.Default.SupervisedUserCircle, contentDescription = null, tint = Color(0xFF1565C0), modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Teacher", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1565C0))
+                                }
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFC62828).copy(alpha = 0.12f),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = Color(0xFFC62828), modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Admin", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Role Assignment Cards for Account Creation
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Assign Account Role (Admin, Teacher, or Student):",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
@@ -256,101 +365,95 @@ fun LoginScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
-                                    text = "New users can only create Student or Teacher accounts. Administrative access cannot be created and is reserved for the single system administrator.",
+                                    text = "Select the role you wish to assign for this new account. It will be registered in Firebase Auth and Cloud Firestore.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                             }
                         }
-                    }
 
-                    val availableRoles = if (isSignUpMode) {
-                        listOf(UserRole.STUDENT, UserRole.TEACHER)
-                    } else {
-                        UserRole.entries
-                    }
+                        UserRole.entries.forEach { role ->
+                            val isSelected = selectedRole == role
+                            val roleColor = when (role) {
+                                UserRole.STUDENT -> Color(0xFF2E7D32)
+                                UserRole.TEACHER -> Color(0xFF1565C0)
+                                UserRole.ADMIN -> Color(0xFFC62828)
+                            }
+                            val roleDesc = when (role) {
+                                UserRole.STUDENT -> "Take quizzes, view scores, test analytics & rank on leaderboard"
+                                UserRole.TEACHER -> "Author quizzes, monitor student analytics & AI generator"
+                                UserRole.ADMIN -> "Governance console, system settings & security audits (requires passcode)"
+                            }
+                            val roleIcon = when (role) {
+                                UserRole.STUDENT -> Icons.Default.School
+                                UserRole.TEACHER -> Icons.Default.SupervisedUserCircle
+                                UserRole.ADMIN -> Icons.Default.AdminPanelSettings
+                            }
 
-                    availableRoles.forEach { role ->
-                        val isSelected = selectedRole == role
-                        val roleColor = when (role) {
-                            UserRole.STUDENT -> Color(0xFF2E7D32)
-                            UserRole.TEACHER -> Color(0xFF1565C0)
-                            UserRole.ADMIN -> Color(0xFFC62828)
-                        }
-                        val roleDesc = when (role) {
-                            UserRole.STUDENT -> "Take exams, view progress & compete on leaderboard"
-                            UserRole.TEACHER -> "Author quizzes, monitor submissions & generate with AI"
-                            UserRole.ADMIN -> "Governance console, system audits & security logs"
-                        }
-                        val roleIcon = when (role) {
-                            UserRole.STUDENT -> Icons.Default.School
-                            UserRole.TEACHER -> Icons.Default.SupervisedUserCircle
-                            UserRole.ADMIN -> Icons.Default.AdminPanelSettings
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) roleColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                            border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, roleColor) else null,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    selectedRole = role
-                                    viewModel.clearAuthError()
-                                }
-                                .testTag("role_chip_${role.name.lowercase()}")
-                        ) {
-                            Row(
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) roleColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, roleColor) else null,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isSelected) roleColor else MaterialTheme.colorScheme.surfaceVariant),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = roleIcon,
-                                        contentDescription = role.name,
-                                        tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = when (role) {
-                                            UserRole.STUDENT -> "Student"
-                                            UserRole.TEACHER -> "Faculty / Teacher"
-                                            UserRole.ADMIN -> "Platform Administrator"
-                                        },
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (isSelected) roleColor else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = roleDesc,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = {
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
                                         selectedRole = role
                                         viewModel.clearAuthError()
-                                    },
-                                    colors = RadioButtonDefaults.colors(selectedColor = roleColor)
-                                )
+                                    }
+                                    .testTag("role_chip_${role.name.lowercase()}")
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isSelected) roleColor else MaterialTheme.colorScheme.surfaceVariant),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = roleIcon,
+                                            contentDescription = role.name,
+                                            tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = when (role) {
+                                                UserRole.STUDENT -> "Student"
+                                                UserRole.TEACHER -> "Faculty / Teacher"
+                                                UserRole.ADMIN -> "Platform Administrator"
+                                            },
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (isSelected) roleColor else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = roleDesc,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = {
+                                            selectedRole = role
+                                            viewModel.clearAuthError()
+                                        },
+                                        colors = RadioButtonDefaults.colors(selectedColor = roleColor)
+                                    )
+                                }
                             }
                         }
                     }
@@ -521,6 +624,29 @@ fun LoginScreen(
                         )
                     }
 
+                    // Admin Passcode (Only in Sign-Up mode when Admin is selected)
+                    AnimatedVisibility(visible = isSignUpMode && selectedRole == UserRole.ADMIN) {
+                        OutlinedTextField(
+                            value = adminPasscodeInput,
+                            onValueChange = { adminPasscodeInput = it },
+                            label = { Text("Admin Security Passcode") },
+                            placeholder = { Text("Enter admin passcode (default: admin123)") },
+                            leadingIcon = {
+                                Icon(Icons.Default.VpnKey, contentDescription = null, tint = Color(0xFFC62828))
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Password,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = { focusManager.clearFocus() }
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
                     // Forgot Password link (Sign In mode only)
                     if (!isSignUpMode) {
                         Row(
@@ -538,7 +664,7 @@ fun LoginScreen(
                                 Text(
                                     text = "Forgot Password?",
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = rolePrimaryColor
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -552,7 +678,6 @@ fun LoginScreen(
                             focusManager.clearFocus()
                             if (isSignUpMode) {
                                 if (confirmPasswordInput != passwordInput) {
-                                    // Handle mismatch locally
                                     return@Button
                                 }
                                 viewModel.signUpWithFirebase(
@@ -560,14 +685,13 @@ fun LoginScreen(
                                     password = passwordInput.trim(),
                                     name = nameInput.trim(),
                                     role = selectedRole,
-                                    adminPasscode = "",
+                                    adminPasscode = adminPasscodeInput.trim(),
                                     onSuccess = onLoginSuccess
                                 )
                             } else {
                                 viewModel.signInWithFirebase(
                                     email = emailInput.trim(),
                                     password = passwordInput.trim(),
-                                    role = selectedRole,
                                     onSuccess = onLoginSuccess
                                 )
                             }
@@ -579,7 +703,9 @@ fun LoginScreen(
                             .height(52.dp)
                             .testTag("auth_submit_btn"),
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = rolePrimaryColor)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isSignUpMode) rolePrimaryColor else MaterialTheme.colorScheme.primary
+                        )
                     ) {
                         if (isAuthLoading) {
                             CircularProgressIndicator(
@@ -596,13 +722,39 @@ fun LoginScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (isSignUpMode) {
-                                    "Create ${selectedRole.name.lowercase().replaceFirstChar { it.uppercase() }} Account"
+                                    "Create Account & Assign as ${selectedRole.name.lowercase().replaceFirstChar { it.uppercase() }}"
                                 } else {
-                                    "Sign In as ${selectedRole.name.lowercase().replaceFirstChar { it.uppercase() }}"
+                                    "Sign In"
                                 },
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             )
+                        }
+                    }
+
+                    if (!isSignUpMode) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF2E7D32),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Automatic Role Routing: Teacher, Student & Admin are detected via backend.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
 
@@ -620,9 +772,6 @@ fun LoginScreen(
                         TextButton(
                             onClick = {
                                 isSignUpMode = !isSignUpMode
-                                if (isSignUpMode && selectedRole == UserRole.ADMIN) {
-                                    selectedRole = UserRole.STUDENT
-                                }
                                 viewModel.clearAuthError()
                             },
                             modifier = Modifier.testTag("toggle_auth_mode_btn")
@@ -630,7 +779,7 @@ fun LoginScreen(
                             Text(
                                 text = if (isSignUpMode) "Sign In here" else "Create an account",
                                 fontWeight = FontWeight.Bold,
-                                color = rolePrimaryColor
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -666,51 +815,19 @@ fun LoginScreen(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "Platform Demo Credentials",
+                                text = "Quick Demo Accounts (1-Tap Fill)",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                         }
 
                         Text(
-                            text = "Tap to autofill login credentials. The system allows only one designated administrator.",
+                            text = "Tap any account to fill credentials into the single login board, then click Sign In. The backend queries Firestore to route to that user's dashboard automatically.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        // 1. Sole Admin
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    emailInput = "admin@quizplatform.com"
-                                    passwordInput = "admin123"
-                                    selectedRole = UserRole.ADMIN
-                                    viewModel.clearAuthError()
-                                }
-                                .testTag("autofill_admin_btn")
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text("Administrator (Sole Admin)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFC62828))
-                                    }
-                                    Text("admin@quizplatform.com  •  admin123", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                Text("Autofill", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
-                            }
-                        }
-
-                        // 2. Teacher
+                        // 1. Teacher
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.surface,
@@ -720,7 +837,6 @@ fun LoginScreen(
                                 .clickable {
                                     emailInput = "teacher@quizplatform.com"
                                     passwordInput = "teacher123"
-                                    selectedRole = UserRole.TEACHER
                                     viewModel.clearAuthError()
                                 }
                                 .testTag("autofill_teacher_btn")
@@ -733,14 +849,14 @@ fun LoginScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Faculty / Teacher", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1565C0))
-                                    Text("teacher@quizplatform.com  •  teacher123", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Prof. Sarah Jenkins (Teacher)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1565C0))
+                                    Text("teacher@quizplatform.com  •  teacher123  ➔  Teacher Dashboard", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 Text("Autofill", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1565C0))
                             }
                         }
 
-                        // 3. Student
+                        // 2. Student
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.surface,
@@ -750,7 +866,6 @@ fun LoginScreen(
                                 .clickable {
                                     emailInput = "student@quizplatform.com"
                                     passwordInput = "student123"
-                                    selectedRole = UserRole.STUDENT
                                     viewModel.clearAuthError()
                                 }
                                 .testTag("autofill_student_btn")
@@ -763,10 +878,39 @@ fun LoginScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Student", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF2E7D32))
-                                    Text("student@quizplatform.com  •  student123", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Alex Rivera (Student)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF2E7D32))
+                                    Text("student@quizplatform.com  •  student123  ➔  Student Dashboard", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 Text("Autofill", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                            }
+                        }
+
+                        // 3. Admin
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    emailInput = "admin@quizplatform.com"
+                                    passwordInput = "admin123"
+                                    viewModel.clearAuthError()
+                                }
+                                .testTag("autofill_admin_btn")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("System Administrator (Admin)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFC62828))
+                                    Text("admin@quizplatform.com  •  admin123  ➔  Admin Dashboard", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text("Autofill", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
                             }
                         }
                     }
