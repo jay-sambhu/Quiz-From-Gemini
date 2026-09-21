@@ -100,6 +100,16 @@ class QuizRepository(
         firestoreManager?.deleteCategory(categoryId)
     }
 
+    suspend fun refreshQuizSetsFromFirestore(): List<QuizSetEntity> {
+        val remoteSets = firestoreManager?.fetchQuizSetsFromFirestore()
+        return if (!remoteSets.isNullOrEmpty()) remoteSets else quizDao.getAllQuizSets().firstOrNull() ?: emptyList()
+    }
+
+    suspend fun refreshCategoriesFromFirestore(): List<CategoryEntity> {
+        val remoteCats = firestoreManager?.fetchCategoriesFromFirestore()
+        return if (!remoteCats.isNullOrEmpty()) remoteCats else quizDao.getAllCategories().firstOrNull() ?: emptyList()
+    }
+
     // --- Quiz Sets & Questions ---
     fun getQuizSetsByCategory(categoryId: String): Flow<List<QuizSetEntity>> = quizDao.getQuizSetsByCategory(categoryId)
 

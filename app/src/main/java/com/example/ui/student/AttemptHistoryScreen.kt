@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -275,47 +277,54 @@ fun AttemptHistoryScreen(
             )
         }
     ) { innerPadding ->
-        if (studentAttempts.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Firestore status banner even when empty
-                PastHistoryFirestoreStatusBar(
-                    isSyncing = isFetchingFirestoreHistory,
-                    isCloudConnected = isCloudConnected,
-                    lastSyncedTime = firestoreHistoryLastSynced,
-                    totalRecords = studentAttempts.size,
-                    onSyncNow = { viewModel.refreshStudentPastHistoryFromFirestore() }
-                )
-
-                Box(
+        PullToRefreshBox(
+            isRefreshing = isFetchingFirestoreHistory,
+            onRefresh = { viewModel.refreshStudentPastHistoryFromFirestore() },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .testTag("past_history_pull_refresh")
+        ) {
+            if (studentAttempts.isEmpty()) {
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    NoQuizResultsEmptyState(
-                        isCard = true,
-                        customTitle = "No Quiz History Found",
-                        customDescription = "No completed quiz attempts found in Firestore for your account. Complete a quiz to see your scores and full answers in this chronological list.",
-                        onTakeQuiz = onBack,
-                        testTag = "attempt_history_empty_state"
+                    // Firestore status banner even when empty
+                    PastHistoryFirestoreStatusBar(
+                        isSyncing = isFetchingFirestoreHistory,
+                        isCloudConnected = isCloudConnected,
+                        lastSyncedTime = firestoreHistoryLastSynced,
+                        totalRecords = studentAttempts.size,
+                        onSyncNow = { viewModel.refreshStudentPastHistoryFromFirestore() }
                     )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        NoQuizResultsEmptyState(
+                            isCard = true,
+                            customTitle = "No Quiz History Found",
+                            customDescription = "No completed quiz attempts found in Firestore for your account. Complete a quiz to see your scores and full answers in this chronological list.",
+                            onTakeQuiz = onBack,
+                            testTag = "attempt_history_empty_state"
+                        )
+                    }
                 }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp)
-            ) {
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp)
+                ) {
                 // 1. Cloud Firestore Sync Status Banner
                 item {
                     PastHistoryFirestoreStatusBar(
@@ -472,6 +481,7 @@ fun AttemptHistoryScreen(
                     }
                 }
             }
+        }
         }
     }
 }

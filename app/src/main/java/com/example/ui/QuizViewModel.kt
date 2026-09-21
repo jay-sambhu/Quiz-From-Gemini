@@ -183,18 +183,64 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     private val _isSavingQuestion = MutableStateFlow(false)
     val isSavingQuestion: StateFlow<Boolean> = _isSavingQuestion.asStateFlow()
 
-    fun refreshStudentPastHistoryFromFirestore() {
+    // --- Student Dashboard & History Pull-to-Refresh Flows ---
+    private val _isRefreshingDashboard = MutableStateFlow(false)
+    val isRefreshingDashboard: StateFlow<Boolean> = _isRefreshingDashboard.asStateFlow()
+
+    private val _lastDashboardRefreshTime = MutableStateFlow(System.currentTimeMillis())
+    val lastDashboardRefreshTime: StateFlow<Long> = _lastDashboardRefreshTime.asStateFlow()
+
+    /**
+     * Comprehensive pull-to-refresh for Student Dashboard:
+     * - Fetches updated quiz sets and questions from Cloud Firestore
+     * - Fetches updated subject categories
+     * - Retrieves student's latest quiz attempts & results
+     * - Updates real-time leaderboard standings
+     */
+    fun refreshStudentDashboard(onComplete: (() -> Unit)? = null) {
+        viewModelScope.launch {
+            _isRefreshingDashboard.value = true
+            try {
+                // 1. Fetch updated quiz sets and questions from Firestore
+                val refreshedQuizzes = repository.refreshQuizSetsFromFirestore()
+                // 2. Fetch updated categories
+                val refreshedCategories = repository.refreshCategoriesFromFirestore()
+                // 3. Fetch student's latest attempts
+                val studentId = currentUser.value?.id
+                var attemptCount = 0
+                if (!studentId.isNullOrBlank()) {
+                    val retrievedAttempts = repository.fetchStudentAttemptsFromFirestore(studentId)
+                    attemptCount = retrievedAttempts.size
+                    _firestoreHistoryLastSynced.value = System.currentTimeMillis()
+                }
+                // 4. Update leaderboard
+                fetchLeaderboardFromFirestore()
+                _lastDashboardRefreshTime.value = System.currentTimeMillis()
+                _uiEventMessage.value = "Updated from server: ${refreshedQuizzes.size} quizzes, $attemptCount results"
+            } catch (e: Exception) {
+                Log.w("QuizViewModel", "Dashboard pull-to-refresh note: ${e.message}")
+                _uiEventMessage.value = "Quizzes and results refreshed (Offline mode)"
+            } finally {
+                _isRefreshingDashboard.value = false
+                onComplete?.invoke()
+            }
+        }
+    }
+
+    fun refreshStudentPastHistoryFromFirestore(onComplete: (() -> Unit)? = null) {
         val studentId = currentUser.value?.id ?: return
         viewModelScope.launch {
             _isFetchingFirestoreHistory.value = true
             try {
                 val retrieved = repository.fetchStudentAttemptsFromFirestore(studentId)
+                repository.refreshQuizSetsFromFirestore()
                 _firestoreHistoryLastSynced.value = System.currentTimeMillis()
                 _uiEventMessage.value = "Retrieved ${retrieved.size} completed quizzes from Firestore"
             } catch (e: Exception) {
                 Log.w("QuizViewModel", "Failed to retrieve student past history from Firestore: ${e.message}")
             } finally {
                 _isFetchingFirestoreHistory.value = false
+                onComplete?.invoke()
             }
         }
     }

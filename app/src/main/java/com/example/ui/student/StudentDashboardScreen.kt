@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +67,8 @@ fun StudentDashboardScreen(
     val cloudSyncMessage by viewModel.cloudSyncMessage.collectAsState()
     val progressSummary by viewModel.studentProgressSummary.collectAsState()
     val isSyncingFirestore by viewModel.isSyncingFirestore.collectAsState()
+    val isRefreshingDashboard by viewModel.isRefreshingDashboard.collectAsState()
+    val lastDashboardRefreshTime by viewModel.lastDashboardRefreshTime.collectAsState()
 
     val context = LocalContext.current
     var showProfileAvatarDialog by remember { mutableStateOf(false) }
@@ -232,15 +235,15 @@ fun StudentDashboardScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { viewModel.syncWithFirestoreCloud() },
-                        enabled = !isSyncingFirestore,
+                        onClick = { viewModel.refreshStudentDashboard() },
+                        enabled = !isRefreshingDashboard && !isSyncingFirestore,
                         modifier = Modifier
                             .padding(end = 4.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .testTag("student_sync_cloud_btn")
                     ) {
-                        if (isSyncingFirestore) {
+                        if (isRefreshingDashboard || isSyncingFirestore) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp,
@@ -249,7 +252,7 @@ fun StudentDashboardScreen(
                         } else {
                             Icon(
                                 Icons.Default.CloudSync,
-                                contentDescription = "Sync Cloud",
+                                contentDescription = "Refresh from Server",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -272,15 +275,59 @@ fun StudentDashboardScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        PullToRefreshBox(
+            isRefreshing = isRefreshingDashboard,
+            onRefresh = { viewModel.refreshStudentDashboard() },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)
+                .testTag("student_dashboard_pull_refresh")
         ) {
-            // 0. Universal Search Bar on Student Dashboard (Search Quizzes by Title or Category)
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)
+            ) {
+                // Pull-to-refresh & Server status banner
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .testTag("student_dashboard_pull_refresh_banner"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Pull down to refresh quizzes & results",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = if (isRefreshingDashboard) "Refreshing..." else "Server Sync",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isRefreshingDashboard) BentoPrimary else BentoEmerald
+                        )
+                    }
+                }
+
+                // 0. Universal Search Bar on Student Dashboard (Search Quizzes by Title or Category)
             item {
                 StudentDashboardSearchBar(
                     searchQuery = searchQuery,
@@ -1106,6 +1153,7 @@ fun StudentDashboardScreen(
                 }
             }
             }
+        }
         }
     }
 

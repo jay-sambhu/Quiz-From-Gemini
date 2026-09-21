@@ -624,6 +624,92 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
     }
 
     /**
+     * Directly queries and fetches all quiz sets and their associated questions from Cloud Firestore,
+     * synchronizing the local Room database cache for immediate offline & online accessibility.
+     */
+    suspend fun fetchQuizSetsFromFirestore(): List<QuizSetEntity> {
+        val db = firestore ?: return emptyList()
+        return try {
+            val snapshot = db.collection(COLLECTION_QUIZ_SETS).get().awaitTask()
+            val quizSets = snapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                QuizSetEntity(
+                    id = doc.id,
+                    title = data["title"] as? String ?: "",
+                    description = data["description"] as? String ?: "",
+                    categoryId = data["categoryId"] as? String ?: "",
+                    categoryName = data["categoryName"] as? String ?: "",
+                    creatorTeacherId = data["creatorTeacherId"] as? String ?: "",
+                    creatorTeacherName = data["creatorTeacherName"] as? String ?: "",
+                    durationMinutes = (data["durationMinutes"] as? Long)?.toInt() ?: 10,
+                    passPercentage = (data["passPercentage"] as? Long)?.toInt() ?: 60,
+                    difficulty = data["difficulty"] as? String ?: "Medium",
+                    createdAt = (data["createdAt"] as? Long) ?: System.currentTimeMillis(),
+                    tags = data["tags"] as? String ?: ""
+                )
+            }
+            quizSets.forEach { quizDao.insertQuizSet(it) }
+
+            // Also fetch questions from Firestore to guarantee quiz completeness
+            try {
+                val questionsSnapshot = db.collection(COLLECTION_QUESTIONS).get().awaitTask()
+                val questionsList = questionsSnapshot.documents.mapNotNull { doc ->
+                    val data = doc.data ?: return@mapNotNull null
+                    QuestionEntity(
+                        id = doc.id,
+                        quizSetId = data["quizSetId"] as? String ?: "",
+                        questionText = data["questionText"] as? String ?: "",
+                        optionA = data["optionA"] as? String ?: "",
+                        optionB = data["optionB"] as? String ?: "",
+                        optionC = data["optionC"] as? String ?: "",
+                        optionD = data["optionD"] as? String ?: "",
+                        correctOptionIndex = (data["correctOptionIndex"] as? Long)?.toInt() ?: 0,
+                        explanation = data["explanation"] as? String ?: ""
+                    )
+                }
+                if (questionsList.isNotEmpty()) {
+                    quizDao.insertQuestions(questionsList)
+                }
+            } catch (qe: Exception) {
+                Log.w(TAG, "Non-fatal: questions fetch during quiz set sync: ${qe.message}")
+            }
+
+            Log.d(TAG, "Fetched and cached ${quizSets.size} QuizSets from Firestore.")
+            quizSets
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed fetching QuizSets from Firestore: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Directly queries and fetches all subject categories from Cloud Firestore,
+     * synchronizing the local Room database cache.
+     */
+    suspend fun fetchCategoriesFromFirestore(): List<CategoryEntity> {
+        val db = firestore ?: return emptyList()
+        return try {
+            val snapshot = db.collection(COLLECTION_CATEGORIES).get().awaitTask()
+            val categories = snapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                CategoryEntity(
+                    id = doc.id,
+                    name = data["name"] as? String ?: "",
+                    description = data["description"] as? String ?: "",
+                    iconName = data["iconName"] as? String ?: "School",
+                    colorHex = data["colorHex"] as? String ?: "#4F46E5"
+                )
+            }
+            categories.forEach { quizDao.insertCategory(it) }
+            Log.d(TAG, "Fetched and cached ${categories.size} Categories from Firestore.")
+            categories
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed fetching Categories from Firestore: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
      * Saves a QuizQuestion directly to Firestore in the 'questions' collection.
      */
     suspend fun saveQuizQuestionToFirestore(question: QuizQuestion): Boolean {
