@@ -216,10 +216,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                 // 4. Update leaderboard
                 fetchLeaderboardFromFirestore()
                 _lastDashboardRefreshTime.value = System.currentTimeMillis()
-                _uiEventMessage.value = "Updated from server: ${refreshedQuizzes.size} quizzes, $attemptCount results"
             } catch (e: Exception) {
                 Log.w("QuizViewModel", "Dashboard pull-to-refresh note: ${e.message}")
-                _uiEventMessage.value = "Quizzes and results refreshed (Offline mode)"
             } finally {
                 _isRefreshingDashboard.value = false
                 onComplete?.invoke()
@@ -241,6 +239,48 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 _isFetchingFirestoreHistory.value = false
                 onComplete?.invoke()
+            }
+        }
+    }
+
+    // --- Firestore Analytics Dashboard State Flows ---
+    private val _isFetchingFirestoreAnalytics = MutableStateFlow(false)
+    val isFetchingFirestoreAnalytics: StateFlow<Boolean> = _isFetchingFirestoreAnalytics.asStateFlow()
+
+    private val _analyticsLastSyncedTimestamp = MutableStateFlow(System.currentTimeMillis())
+    val analyticsLastSyncedTimestamp: StateFlow<Long> = _analyticsLastSyncedTimestamp.asStateFlow()
+
+    private val _analyticsSyncMessage = MutableStateFlow<String?>(null)
+    val analyticsSyncMessage: StateFlow<String?> = _analyticsSyncMessage.asStateFlow()
+
+    /**
+     * Pulls student quiz performance attempts directly from Cloud Firestore (quiz_attempts collection)
+     * and synchronizes with local Room cache.
+     * If studentId is null or blank, fetches all student attempts across the institution.
+     */
+    fun refreshAnalyticsFromFirestore(studentId: String? = null, onComplete: ((Int) -> Unit)? = null) {
+        viewModelScope.launch {
+            _isFetchingFirestoreAnalytics.value = true
+            try {
+                val targetId = studentId ?: ""
+                val attempts = repository.fetchStudentAttemptsFromFirestore(targetId)
+                repository.refreshQuizSetsFromFirestore()
+                repository.refreshCategoriesFromFirestore()
+                _analyticsLastSyncedTimestamp.value = System.currentTimeMillis()
+                val summary = if (targetId.isNotBlank()) {
+                    "Synced ${attempts.size} attempts from Cloud Firestore for student"
+                } else {
+                    "Synced ${attempts.size} institution quiz attempts from Cloud Firestore"
+                }
+                _analyticsSyncMessage.value = summary
+                _uiEventMessage.value = summary
+                onComplete?.invoke(attempts.size)
+            } catch (e: Exception) {
+                Log.w("QuizViewModel", "Analytics Firestore refresh notice: ${e.message}")
+                _analyticsSyncMessage.value = "Synced with local cache (${e.message})"
+                onComplete?.invoke(0)
+            } finally {
+                _isFetchingFirestoreAnalytics.value = false
             }
         }
     }
@@ -460,8 +500,9 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                 lastActiveTimestamp = lastActive
             )
         }.sortedWith(
-            compareByDescending<StudentLeaderboardEntry> { it.totalScore }
+            compareByDescending<StudentLeaderboardEntry> { it.totalQuizzesTaken > 0 }
                 .thenByDescending { it.averagePercentage }
+                .thenByDescending { it.totalScore }
                 .thenByDescending { it.totalQuizzesTaken }
         )
 
@@ -717,7 +758,6 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     fun syncWithFirestoreCloud() {
         viewModelScope.launch {
             _isSyncingFirestore.value = true
-            _uiEventMessage.value = "Syncing with Firebase Firestore Cloud..."
             try {
                 val users = allUsers.value
                 val categories = allCategories.value
@@ -725,9 +765,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                 val attempts = allAttempts.value
                 val notifs = notificationLogs.value
                 repository.syncAllDataToFirestore(users, categories, quizSets, attempts, notifs)
-                _uiEventMessage.value = "Firestore Cloud Sync Complete!"
             } catch (e: Exception) {
-                _uiEventMessage.value = "Sync error: ${e.localizedMessage}"
+                Log.w("QuizViewModel", "Background sync note: ${e.message}")
             } finally {
                 _isSyncingFirestore.value = false
             }
@@ -762,7 +801,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authErrorMessage.value = null
-            _uiEventMessage.value = "Authenticating with Firebase and querying user role from database..."
+            _uiEventMessage.value = "Authenticating account..."
             try {
                 // Check if signing in with one of the standard platform accounts
                 val isStdAdmin = cleanEmail.equals("admin@quizplatform.com", ignoreCase = true) && password == "admin123"
@@ -782,7 +821,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                             msg.contains("password", ignoreCase = true) -> "Incorrect password. Please try again."
                             msg.contains("no user", ignoreCase = true) || msg.contains("user-not-found", ignoreCase = true) -> "No account found with this email. Please sign up."
                             msg.contains("invalid-credential", ignoreCase = true) -> "Invalid email or password. Please try again."
-                            msg.contains("network", ignoreCase = true) -> "Network error connecting to Firebase. Check internet connection."
+                            msg.contains("network", ignoreCase = true) -> "Network error. Please check your internet connection."
                             else -> msg
                         }
                         // If Firebase Auth is in offline or restricted mode, allow local credential check
@@ -898,7 +937,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authErrorMessage.value = null
-            _uiEventMessage.value = "Creating Firebase account and assigning role ${role.name} in Firestore..."
+            _uiEventMessage.value = "Creating account and configuring profile..."
             try {
                 var firebaseUserId: String? = null
                 val auth = firebaseAuth
@@ -941,7 +980,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
 
                 isExplicitlySignedOut = false
                 _currentUser.value = newUser
-                _uiEventMessage.value = "Account created & assigned role: ${newUser.role.name} (${newUser.email})"
+                _uiEventMessage.value = "Account created successfully (${newUser.email})"
                 _isAuthLoading.value = false
                 onSuccess(newUser.role)
             } catch (e: Exception) {
@@ -1174,8 +1213,15 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                 severity = "WARNING",
                 actor = admin.name
             )
-            _uiEventMessage.value = "User role updated in Firestore to ${newRole.name}"
+            _uiEventMessage.value = "User role updated to ${newRole.name}"
         }
+    }
+
+    /**
+     * Admin action to validate a student and promote them to Faculty / Teacher.
+     */
+    fun promoteStudentToTeacher(userId: String) {
+        changeUserRole(userId, UserRole.TEACHER)
     }
 
     fun forceSyncFirestore() {
@@ -1197,9 +1243,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                     severity = "SUCCESS",
                     actor = user?.name ?: "Admin User"
                 )
-                _uiEventMessage.value = "Cloud Firestore force-sync complete!"
             } catch (e: Exception) {
-                _uiEventMessage.value = "Sync error: ${e.localizedMessage}"
+                Log.w("QuizViewModel", "Cloud sync note: ${e.message}")
             } finally {
                 _isSyncingFirestore.value = false
             }
@@ -1437,7 +1482,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         questionCount: Int = 5,
         durationMinutes: Int = 10,
         difficulty: String = "Medium",
-        tags: String = ""
+        tags: String = "",
+        searchGroundingQuery: String = ""
     ) {
         val teacher = _currentUser.value ?: return
         if (teacher.role != UserRole.TEACHER && teacher.role != UserRole.ADMIN) {
@@ -1453,13 +1499,22 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                 questionCount = questionCount,
                 currentStepIndex = 0,
                 progressPercentage = 0.15f,
-                statusMessage = "Calibrating $difficulty pedagogy for '$topic'..."
+                statusMessage = if (searchGroundingQuery.isNotBlank()) {
+                    "Grounding with Google Search for '$searchGroundingQuery' ($difficulty)..."
+                } else {
+                    "Calibrating $difficulty pedagogy for '$topic'..."
+                }
             )
 
             // Launch progress simulation job to smoothly guide user perception
             val progressTicker = launch {
                 val milestones = listOf(
-                    Triple(1, 0.38f, "Querying Gemini 3.5 Flash neural models..."),
+                    Triple(
+                        1,
+                        0.38f,
+                        if (searchGroundingQuery.isNotBlank()) "Querying Google Search Grounding for real-time facts..."
+                        else "Querying Gemini 3.5 Flash neural models..."
+                    ),
                     Triple(2, 0.65f, "Crafting 4 options & plausible distractors..."),
                     Triple(3, 0.85f, "Synthesizing in-depth explanations & answer keys..."),
                     Triple(4, 0.94f, "Publishing to Question Bank & Cloud Firestore...")
@@ -1488,7 +1543,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
                     questionCount = questionCount,
                     durationMinutes = durationMinutes,
                     difficulty = difficulty,
-                    tags = tags
+                    tags = tags,
+                    searchGroundingQuery = searchGroundingQuery
                 )
                 progressTicker.cancel()
                 _aiGenerationProgress.value = _aiGenerationProgress.value?.copy(
@@ -1613,20 +1669,30 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         promptHint: String = "",
         difficulty: String = "Medium",
         currentDraft: QuestionEntity? = null,
+        searchGroundingQuery: String = "",
         onResult: (com.example.data.gemini.GeneratedQuizQuestion) -> Unit
     ) {
         viewModelScope.launch {
             _isAiSuggestingQuestion.value = true
-            _aiSuggestionStatus.value = "Gemini AI is crafting question content & plausible distractors..."
+            _aiSuggestionStatus.value = if (searchGroundingQuery.isNotBlank()) {
+                "Grounding with Google Search for '$searchGroundingQuery'..."
+            } else {
+                "Gemini AI is crafting question content & plausible distractors..."
+            }
             try {
                 val suggestion = repository.geminiQuizService.suggestSingleQuestion(
                     topic = topic,
                     promptHint = promptHint,
                     difficultyLevel = difficulty,
-                    currentDraft = currentDraft
+                    currentDraft = currentDraft,
+                    searchGroundingQuery = searchGroundingQuery
                 )
                 onResult(suggestion)
-                _uiEventMessage.value = "Gemini suggested content generated successfully!"
+                _uiEventMessage.value = if (searchGroundingQuery.isNotBlank()) {
+                    "Generated fact-grounded question using Google Search!"
+                } else {
+                    "Gemini suggested content generated successfully!"
+                }
             } catch (e: Exception) {
                 _uiEventMessage.value = "Gemini Suggestion error: ${e.localizedMessage}"
             } finally {

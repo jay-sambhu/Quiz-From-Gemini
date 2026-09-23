@@ -99,16 +99,18 @@ class GeminiQuizService(
 
     /**
      * Generates quiz questions based on the provided topic and difficulty level.
+     * When [searchGroundingQuery] is provided, enables Google Search grounding tools to supply up-to-date facts.
      * Iterates through candidate API keys and automatically cycles if a rate limit is encountered.
      */
     suspend fun generateQuizQuestions(
         topic: String,
         difficultyLevel: String,
         count: Int = 5,
-        quizSetId: String = ""
+        quizSetId: String = "",
+        searchGroundingQuery: String = ""
     ): List<QuestionEntity> = withContext(Dispatchers.IO) {
         val parsedDifficulty = QuizDifficulty.fromString(difficultyLevel)
-        Log.d(TAG, "Generating $count questions for topic='$topic', difficulty='${parsedDifficulty.displayName}'")
+        Log.d(TAG, "Generating $count questions for topic='$topic', difficulty='${parsedDifficulty.displayName}', groundingQuery='$searchGroundingQuery'")
 
         val keys = getCandidateKeys()
         if (keys.isEmpty()) {
@@ -116,7 +118,7 @@ class GeminiQuizService(
             return@withContext generateFallbackQuestions(topic, parsedDifficulty, count, quizSetId)
         }
 
-        val prompt = buildPrompt(topic, parsedDifficulty, count)
+        val prompt = buildPrompt(topic, parsedDifficulty, count, searchGroundingQuery)
 
         for (currentKey in keys) {
             val masked = apiKeyManager?.maskKey(currentKey) ?: (currentKey.take(6) + "...")
@@ -125,6 +127,14 @@ class GeminiQuizService(
                     val partsArray = JSONArray().put(JSONObject().put("text", prompt))
                     val contentObject = JSONObject().put("parts", partsArray)
                     put("contents", JSONArray().put(contentObject))
+
+                    // If search grounding query is specified, enable Google Search Grounding tool
+                    if (searchGroundingQuery.isNotBlank()) {
+                        val toolsArray = JSONArray().apply {
+                            put(JSONObject().put("google_search", JSONObject()))
+                        }
+                        put("tools", toolsArray)
+                    }
 
                     val generationConfig = JSONObject().apply {
                         put("temperature", 0.7)
@@ -178,11 +188,22 @@ class GeminiQuizService(
 
     /**
      * Builds the system & user prompt specifying JSON array output and difficulty guidelines.
+     * Incorporates Google Search Grounding guidelines when [searchGroundingQuery] is provided.
      */
-    private fun buildPrompt(topic: String, difficulty: QuizDifficulty, count: Int): String {
+    private fun buildPrompt(topic: String, difficulty: QuizDifficulty, count: Int, searchGroundingQuery: String = ""): String {
+        val groundingSection = if (searchGroundingQuery.isNotBlank()) {
+            """
+            
+            Google Search Grounding Directive:
+            - Ground your questions and factual statements using real-time, up-to-date web search data for query: "$searchGroundingQuery".
+            - Verify current facts, contemporary statistics, breakthrough discoveries, and recent academic findings.
+            - Ensure questions, distractors, and explanations reflect accurate, verified, up-to-date knowledge.
+            """.trimIndent()
+        } else ""
+
         return """
             You are a master academic assessment designer.
-            Task: Create exactly $count multiple-choice questions on the topic: "$topic".
+            Task: Create exactly $count multiple-choice questions on the topic: "$topic".$groundingSection
             Difficulty Level: ${difficulty.displayName.uppercase()}
             Pedagogical Difficulty Guidance: ${difficulty.promptGuidance}
 
@@ -420,13 +441,15 @@ class GeminiQuizService(
 
     /**
      * Suggests a single comprehensive question based on teacher topic, prompt hint, or draft context.
+     * When [searchGroundingQuery] is provided, grounds factual content using Google Search.
      * Cycles through available API keys upon encountering rate limits.
      */
     suspend fun suggestSingleQuestion(
         topic: String,
         promptHint: String = "",
         difficultyLevel: String = "Medium",
-        currentDraft: QuestionEntity? = null
+        currentDraft: QuestionEntity? = null,
+        searchGroundingQuery: String = ""
     ): GeneratedQuizQuestion = withContext(Dispatchers.IO) {
         val parsedDifficulty = QuizDifficulty.fromString(difficultyLevel)
         val cleanTopic = if (topic.isNotBlank()) topic.trim() else "Academic Principles"
@@ -436,7 +459,7 @@ class GeminiQuizService(
             return@withContext fallbackSingleSuggestion(cleanTopic, promptHint, parsedDifficulty, currentDraft)
         }
 
-        val prompt = buildSingleQuestionPrompt(cleanTopic, promptHint, parsedDifficulty, currentDraft)
+        val prompt = buildSingleQuestionPrompt(cleanTopic, promptHint, parsedDifficulty, currentDraft, searchGroundingQuery)
 
         for (currentKey in keys) {
             val masked = apiKeyManager?.maskKey(currentKey) ?: (currentKey.take(6) + "...")
@@ -445,6 +468,15 @@ class GeminiQuizService(
                     val partsArray = JSONArray().put(JSONObject().put("text", prompt))
                     val contentObject = JSONObject().put("parts", partsArray)
                     put("contents", JSONArray().put(contentObject))
+
+                    // If search grounding query is specified, enable Google Search Grounding tool
+                    if (searchGroundingQuery.isNotBlank()) {
+                        val toolsArray = JSONArray().apply {
+                            put(JSONObject().put("google_search", JSONObject()))
+                        }
+                        put("tools", toolsArray)
+                    }
+
                     val generationConfig = JSONObject().apply {
                         put("temperature", 0.7)
                         put("topP", 0.95)
@@ -593,11 +625,21 @@ class GeminiQuizService(
         topic: String,
         promptHint: String,
         difficulty: QuizDifficulty,
-        currentDraft: QuestionEntity?
+        currentDraft: QuestionEntity?,
+        searchGroundingQuery: String = ""
     ): String {
+        val groundingSection = if (searchGroundingQuery.isNotBlank()) {
+            """
+            
+            Google Search Grounding Directive:
+            - Ground question formulation and options with up-to-date facts from Google Search for: "$searchGroundingQuery".
+            - Ensure questions, distractors, and explanations reflect real-time accuracy and contemporary consensus.
+            """.trimIndent()
+        } else ""
+
         return """
             You are a master academic assessment designer.
-            Task: Create a single multiple-choice question for: "$topic".
+            Task: Create a single multiple-choice question for: "$topic".$groundingSection
             ${if (promptHint.isNotBlank()) "Teacher Hint / Specific Concept: \"$promptHint\"" else ""}
             ${if (currentDraft != null && currentDraft.questionText.isNotBlank()) "Current Draft to Refine: \"${currentDraft.questionText}\"" else ""}
             Difficulty: ${difficulty.displayName.uppercase()} (${difficulty.promptGuidance})

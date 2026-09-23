@@ -91,7 +91,7 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
                                 )
                             }
                             Text(
-                                text = "Platform Oversight & Firebase Central Management",
+                                text = "Platform Oversight & System Governance",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -101,22 +101,13 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
                 actions = {
                     IconButton(
                         onClick = { viewModel.forceSyncFirestore() },
-                        enabled = !isSyncingFirestore,
                         modifier = Modifier.testTag("admin_force_sync_btn")
                     ) {
-                        if (isSyncingFirestore) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = BentoPrimary
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = "Force Sync Cloud",
-                                tint = BentoPrimary
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = "Force Sync Cloud",
+                            tint = BentoPrimary
+                        )
                     }
                     IconButton(
                         onClick = { viewModel.triggerAdminDiagnosticLog() },
@@ -158,13 +149,6 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Live Cloud Status Header Banner
-            FirestoreLiveStatusBanner(
-                metrics = platformMetrics,
-                isSyncing = isSyncingFirestore,
-                onForceSync = { viewModel.forceSyncFirestore() }
-            )
-
             // Primary Navigation Tabs
             ScrollableTabRow(
                 selectedTabIndex = selectedTab,
@@ -226,17 +210,20 @@ fun AdminDashboardScreen(viewModel: QuizViewModel) {
                     )
                     1 -> FullSystemLogsTab(
                         logs = recentLogs,
+                        isSyncing = isSyncingFirestore,
                         isLoggingDiagnostic = isLoggingDiagnostic,
                         onTriggerDiagnostic = { viewModel.triggerAdminDiagnosticLog() }
                     )
                     2 -> UserRosterTab(
                         users = allUsers,
+                        isSyncing = isSyncingFirestore,
                         onRoleChange = { userId, newRole ->
                             viewModel.changeUserRole(userId, newRole)
                         }
                     )
                     3 -> CategoryManagementTab(
                         categories = allCategories,
+                        isSyncing = isSyncingFirestore,
                         onDelete = { categoryId ->
                             viewModel.deleteCategory(categoryId)
                         }
@@ -554,7 +541,7 @@ fun BentoUserEcosystemCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Aggregated across Firestore Multi-Role DB",
+                        text = "Central User Directory & Access Management",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -626,7 +613,7 @@ fun BentoUserEcosystemCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Protected with Firestore Security Rules",
+                text = "Protected with Role-Based Access Controls",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -851,7 +838,7 @@ fun BentoCloudDatastoreCard(
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
-                    text = "Cloud Firestore Datastore",
+                    text = "Cloud Datastore",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -982,7 +969,7 @@ fun BentoRecentLogsSection(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Aggregated from Firestore `system_logs`",
+                    text = "Real-time security and operational events",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1055,11 +1042,11 @@ fun BentoRecentLogsSection(
                     color = BentoCyan
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Recording Diagnostic in Firestore...", fontWeight = FontWeight.SemiBold)
+                Text("Recording Diagnostic Event...", fontWeight = FontWeight.SemiBold)
             } else {
                 Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Record Admin Diagnostic Test in Firestore", fontWeight = FontWeight.SemiBold)
+                Text("Record Admin Diagnostic Test", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -1241,6 +1228,7 @@ fun BentoQuickActionsCard(
 @Composable
 fun FullSystemLogsTab(
     logs: List<SystemLogItem>,
+    isSyncing: Boolean = false,
     isLoggingDiagnostic: Boolean = false,
     onTriggerDiagnostic: () -> Unit
 ) {
@@ -1303,7 +1291,7 @@ fun FullSystemLogsTab(
                         color = BentoCyan
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Pinging Firestore...", style = MaterialTheme.typography.labelMedium, color = BentoCyan)
+                    Text("Pinging Server...", style = MaterialTheme.typography.labelMedium, color = BentoCyan)
                 } else {
                     Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(16.dp), tint = BentoCyan)
                     Spacer(modifier = Modifier.width(6.dp))
@@ -1378,6 +1366,7 @@ fun FullSystemLogsTab(
 @Composable
 fun UserRosterTab(
     users: List<UserEntity>,
+    isSyncing: Boolean = false,
     onRoleChange: (String, UserRole) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -1410,6 +1399,35 @@ fun UserRosterTab(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        // Role Governance Information Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.VerifiedUser,
+                    contentDescription = null,
+                    tint = BentoViolet,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "New users join as Students by default. Validate student credentials and promote them to Faculty / Teacher below.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(
                 selected = selectedRoleFilter == null,
@@ -1428,15 +1446,30 @@ fun UserRosterTab(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 90.dp)
-        ) {
-            items(filteredUsers, key = { it.id }) { user ->
-                UserRoleAdminCard(
-                    user = user,
-                    onRoleChange = { newRole -> onRoleChange(user.id, newRole) }
+        if (filteredUsers.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No users found matching query",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 90.dp)
+            ) {
+                items(filteredUsers, key = { it.id }) { user ->
+                    UserRoleAdminCard(
+                        user = user,
+                        onRoleChange = { newRole -> onRoleChange(user.id, newRole) }
+                    )
+                }
             }
         }
     }
@@ -1448,6 +1481,7 @@ fun UserRosterTab(
 @Composable
 fun CategoryManagementTab(
     categories: List<CategoryEntity>,
+    isSyncing: Boolean = false,
     onDelete: (String) -> Unit
 ) {
     LazyColumn(
@@ -1558,7 +1592,31 @@ fun UserRoleAdminCard(user: UserEntity, onRoleChange: (UserRole) -> Unit) {
                         )
                     }
                 }
+            } else if (user.role == UserRole.STUDENT) {
+                // Students can be validated and promoted to Teacher role by Admin
+                Button(
+                    onClick = { onRoleChange(UserRole.TEACHER) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BentoViolet
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("promote_to_teacher_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VerifiedUser,
+                        contentDescription = "Promote to Teacher",
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Promote to Teacher",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             } else {
+                // Teacher / Faculty role management
                 Box {
                     AssistChip(
                         onClick = { expanded = true },
@@ -1573,7 +1631,11 @@ fun UserRoleAdminCard(user: UserEntity, onRoleChange: (UserRole) -> Unit) {
                     ) {
                         listOf(UserRole.STUDENT, UserRole.TEACHER).forEach { role ->
                             DropdownMenuItem(
-                                text = { Text(role.name) },
+                                text = { 
+                                    Text(
+                                        if (role == UserRole.STUDENT) "Demote to Student" else "Keep as Teacher"
+                                    ) 
+                                },
                                 onClick = {
                                     onRoleChange(role)
                                     expanded = false

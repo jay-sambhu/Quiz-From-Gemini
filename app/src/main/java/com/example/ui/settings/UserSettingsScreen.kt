@@ -612,11 +612,11 @@ fun UserSettingsScreen(
                 }
             }
 
-            // Cloud Firestore Status & Sync
+            // Cloud Status & Sync
             val isCloudConnected by viewModel.isCloudConnected.collectAsState()
             val cloudSyncMsg by viewModel.cloudSyncMessage.collectAsState()
 
-            BentoSectionTitle(title = "Cloud Firestore Database")
+            BentoSectionTitle(title = "Cloud Data Synchronization")
 
             BentoCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -640,7 +640,7 @@ fun UserSettingsScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "Firebase Firestore",
+                                    text = "Cloud Datastore",
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.titleMedium
                                 )
@@ -653,7 +653,7 @@ fun UserSettingsScreen(
                         }
 
                         BentoPillTag(
-                            text = if (isCloudConnected) "ONLINE" else "CACHED",
+                            text = if (isCloudConnected) "ONLINE" else "LOCAL",
                             containerColor = if (isCloudConnected) BentoEmerald.copy(alpha = 0.15f) else BentoAmber.copy(alpha = 0.15f),
                             contentColor = if (isCloudConnected) BentoEmerald else BentoAmber,
                             icon = if (isCloudConnected) Icons.Default.CheckCircle else Icons.Default.Sync
@@ -661,7 +661,7 @@ fun UserSettingsScreen(
                     }
 
                     Text(
-                        text = "Synchronized Collections: 'users' (Profiles, Roles & Photos), 'quiz_sets' (Exams), 'questions' (Question Bank), 'quiz_attempts' (Session Data).",
+                        text = "Synchronizes user profiles, quiz question banks, exam sessions, and leaderboard standings across all devices.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -682,11 +682,11 @@ fun UserSettingsScreen(
                                 color = Color.White
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Syncing with Cloud Firestore...", fontWeight = FontWeight.Bold)
+                            Text("Synchronizing data...", fontWeight = FontWeight.Bold)
                         } else {
                             Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Sync Local Database with Firestore Cloud", fontWeight = FontWeight.Bold)
+                            Text("Synchronize with Cloud", fontWeight = FontWeight.Bold)
                         }
                     }
                 }

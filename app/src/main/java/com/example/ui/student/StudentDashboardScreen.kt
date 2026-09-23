@@ -46,6 +46,7 @@ import com.example.data.local.entities.QuizSetEntity
 import com.example.ui.QuizViewModel
 import com.example.ui.StudentProgressSummary
 import com.example.ui.components.*
+import com.example.ui.student.components.StudentPerformanceDashboard
 import com.example.ui.student.components.StudentPerformanceTrendCard
 import com.example.ui.theme.*
 import java.text.SimpleDateFormat
@@ -58,7 +59,8 @@ fun StudentDashboardScreen(
     viewModel: QuizViewModel,
     onStartQuiz: (QuizSetEntity) -> Unit,
     onViewHistory: () -> Unit,
-    onViewLeaderboard: (() -> Unit)? = null
+    onViewLeaderboard: (() -> Unit)? = null,
+    onViewAnalytics: (() -> Unit)? = null
 ) {
     val currentUser by viewModel.currentUser.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
@@ -70,6 +72,15 @@ fun StudentDashboardScreen(
     val isSyncingFirestore by viewModel.isSyncingFirestore.collectAsState()
     val isRefreshingDashboard by viewModel.isRefreshingDashboard.collectAsState()
     val lastDashboardRefreshTime by viewModel.lastDashboardRefreshTime.collectAsState()
+    val isFetchingFirestoreAnalytics by viewModel.isFetchingFirestoreAnalytics.collectAsState()
+    val analyticsLastSyncedTimestamp by viewModel.analyticsLastSyncedTimestamp.collectAsState()
+    val syncTimeFormatted = remember(analyticsLastSyncedTimestamp) {
+        if (analyticsLastSyncedTimestamp > 0) {
+            SimpleDateFormat("hh:mm:ss a", Locale.getDefault()).format(Date(analyticsLastSyncedTimestamp))
+        } else {
+            "Recent"
+        }
+    }
 
     val context = LocalContext.current
     var showProfileAvatarDialog by remember { mutableStateOf(false) }
@@ -216,45 +227,42 @@ fun StudentDashboardScreen(
                                     modifier = Modifier.size(14.dp)
                                 )
                             }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isCloudConnected) BentoEmerald else BentoAmber)
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = if (isCloudConnected) "Cloud Firestore Synced" else "Local Cache",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isCloudConnected) BentoEmerald else BentoAmber,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
+                            Text(
+                                text = "Welcome back to your learning space",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 },
                 actions = {
                     IconButton(
                         onClick = { viewModel.refreshStudentDashboard() },
-                        enabled = !isRefreshingDashboard && !isSyncingFirestore,
                         modifier = Modifier
                             .padding(end = 4.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .testTag("student_sync_cloud_btn")
                     ) {
-                        if (isRefreshingDashboard || isSyncingFirestore) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = BentoPrimary
-                            )
-                        } else {
+                        Icon(
+                            Icons.Default.CloudSync,
+                            contentDescription = "Refresh from Server",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    if (onViewAnalytics != null) {
+                        IconButton(
+                            onClick = onViewAnalytics,
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .testTag("student_analytics_btn")
+                        ) {
                             Icon(
-                                Icons.Default.CloudSync,
-                                contentDescription = "Refresh from Server",
-                                tint = MaterialTheme.colorScheme.primary
+                                Icons.Default.Insights,
+                                contentDescription = "Performance Analytics Dashboard",
+                                tint = BentoPrimary
                             )
                         }
                     }
@@ -291,43 +299,6 @@ fun StudentDashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)
             ) {
-                // Pull-to-refresh & Server status banner
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                            .testTag("student_dashboard_pull_refresh_banner"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "Pull down to refresh quizzes & results",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Text(
-                            text = if (isRefreshingDashboard) "Refreshing..." else "Server Sync",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isRefreshingDashboard) BentoPrimary else BentoEmerald
-                        )
-                    }
-                }
-
                 // 0. Universal Search Bar on Student Dashboard (Search Quizzes by Title or Category)
             item {
                 StudentDashboardSearchBar(
@@ -481,15 +452,26 @@ fun StudentDashboardScreen(
                                 .padding(2.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(if (selectedDashboardTab == 1) MaterialTheme.colorScheme.surface else Color.Transparent)
-                                .testTag("top_students_tab"),
+                                .testTag("performance_tab"),
                             text = {
-                                Text(
-                                    "Top Students",
-                                    fontWeight = if (selectedDashboardTab == 1) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selectedDashboardTab == 1) BentoAmber else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.sp,
-                                    maxLines = 1
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Insights,
+                                        contentDescription = null,
+                                        tint = if (selectedDashboardTab == 1) BentoPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        "Performance",
+                                        fontWeight = if (selectedDashboardTab == 1) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selectedDashboardTab == 1) BentoPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         )
 
@@ -525,6 +507,25 @@ fun StudentDashboardScreen(
                                     "Scores (${studentAttempts.size})",
                                     fontWeight = if (selectedDashboardTab == 3) FontWeight.Bold else FontWeight.Medium,
                                     color = if (selectedDashboardTab == 3) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp,
+                                    maxLines = 1
+                                )
+                            }
+                        )
+
+                        Tab(
+                            selected = selectedDashboardTab == 4,
+                            onClick = { selectedDashboardTab = 4 },
+                            modifier = Modifier
+                                .padding(2.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selectedDashboardTab == 4) MaterialTheme.colorScheme.surface else Color.Transparent)
+                                .testTag("top_students_tab"),
+                            text = {
+                                Text(
+                                    "Top Students",
+                                    fontWeight = if (selectedDashboardTab == 4) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selectedDashboardTab == 4) BentoAmber else MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 12.sp,
                                     maxLines = 1
                                 )
@@ -625,7 +626,7 @@ fun StudentDashboardScreen(
                         title = "Performance Trend Over Time",
                         subtitle = "Continuous score history & trajectory powered by Compose-Charts",
                         onTakeQuiz = { selectedDashboardTab = 2 },
-                        onAttemptClick = { onViewHistory() }
+                        onAttemptClick = { selectedDashboardTab = 1 }
                     )
                 }
 
@@ -734,7 +735,7 @@ fun StudentDashboardScreen(
                     TopStudentsLeaderboardComponent(
                         viewModel = viewModel,
                         isCompactPreview = true,
-                        onViewFullLeaderboard = { onViewLeaderboard?.invoke() ?: run { selectedDashboardTab = 1 } },
+                        onViewFullLeaderboard = { onViewLeaderboard?.invoke() ?: run { selectedDashboardTab = 4 } },
                         onTakeQuizToClimb = { selectedDashboardTab = 2 }
                     )
                 }
@@ -801,14 +802,23 @@ fun StudentDashboardScreen(
             }
 
             // -------------------------------------------------------------
-            // TAB 1: TOP STUDENTS LEADERBOARD (Full Firestore Live Standings)
+            // TAB 1: PERFORMANCE DASHBOARD (Compose-Charts Visualizations)
             // -------------------------------------------------------------
             if (selectedDashboardTab == 1) {
                 item {
-                    TopStudentsLeaderboardComponent(
-                        viewModel = viewModel,
-                        isCompactPreview = false,
-                        onTakeQuizToClimb = { selectedDashboardTab = 2 }
+                    StudentPerformanceDashboard(
+                        studentAttempts = studentAttempts,
+                        allClassAttempts = allAttempts,
+                        categories = allCategories,
+                        isCloudConnected = isCloudConnected,
+                        lastSyncedTime = syncTimeFormatted,
+                        isFetching = isFetchingFirestoreAnalytics,
+                        onRefreshSync = { viewModel.refreshAnalyticsFromFirestore(currentUser?.id) },
+                        onTakeQuiz = { selectedDashboardTab = 2 },
+                        onRetakeQuiz = { attempt ->
+                            val targetQuiz = allQuizSets.find { it.id == attempt.quizSetId }
+                            if (targetQuiz != null) onStartQuiz(targetQuiz)
+                        }
                     )
                 }
             }
@@ -1175,10 +1185,22 @@ fun StudentDashboardScreen(
                     }
                 }
             }
+
+            // -------------------------------------------------------------
+            // TAB 4: TOP STUDENTS LEADERBOARD (Full Firestore Live Standings)
+            // -------------------------------------------------------------
+            if (selectedDashboardTab == 4) {
+                item {
+                    TopStudentsLeaderboardComponent(
+                        viewModel = viewModel,
+                        isCompactPreview = false,
+                        onTakeQuizToClimb = { selectedDashboardTab = 2 }
+                    )
+                }
             }
         }
-        }
     }
+}
 
     // AI Avatar & Profile Studio Dialog
     if (showProfileAvatarDialog && currentUser != null) {
@@ -1194,6 +1216,7 @@ fun StudentDashboardScreen(
             }
         )
     }
+}
 }
 
 // -------------------------------------------------------------
@@ -1269,7 +1292,7 @@ fun PersonalProgressSummaryCard(
         // Top Row: Tier badge + Cloud sync indicator
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
             BentoPillTag(
@@ -1278,31 +1301,6 @@ fun PersonalProgressSummaryCard(
                 contentColor = BentoAmber,
                 icon = Icons.Default.EmojiEvents
             )
-
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = if (isCloudConnected) BentoEmerald.copy(alpha = 0.12f) else BentoAmber.copy(alpha = 0.12f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.CloudDone,
-                        contentDescription = null,
-                        tint = if (isCloudConnected) BentoEmerald else BentoAmber,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (isCloudConnected) "Firestore Live" else "Offline Cache",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isCloudConnected) BentoEmerald else BentoAmber,
-                        fontSize = 11.sp
-                    )
-                }
-            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))

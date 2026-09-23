@@ -50,9 +50,11 @@ import com.example.ui.theme.BentoViolet
 fun TeacherPerformanceDashboardTab(
     viewModel: QuizViewModel,
     modifier: Modifier = Modifier,
-    onSendAlertToStudent: (StudentPerformanceSummary) -> Unit = {}
+    onSendAlertToStudent: (StudentPerformanceSummary) -> Unit = {},
+    onOpenAnalyticsDashboard: (() -> Unit)? = null
 ) {
     val analyticsOverview by viewModel.teacherAnalyticsOverview.collectAsState()
+    val isSyncingFirestore by viewModel.isSyncingFirestore.collectAsState()
 
     var selectedMode by remember { mutableStateOf(ChartDisplayMode.TRENDS) }
     var selectedEngine by remember { mutableStateOf(ChartEngineType.RECHARTS) }
@@ -81,6 +83,67 @@ fun TeacherPerformanceDashboardTab(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
+        // Compose-Charts Analytics Dashboard Direct Navigation Banner
+        item {
+            BentoCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenAnalyticsDashboard?.invoke() }
+                    .testTag("teacher_open_compose_charts_analytics_banner"),
+                backgroundColor = BentoPrimary.copy(alpha = 0.08f),
+                borderColor = BentoPrimary.copy(alpha = 0.35f),
+                cornerRadius = 16.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BentoPrimary.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Insights, contentDescription = null, tint = BentoPrimary)
+                        }
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Compose-Charts Analytics Dashboard", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                BentoPillTag(
+                                    text = "FIRESTORE LIVE",
+                                    containerColor = BentoEmerald.copy(alpha = 0.15f),
+                                    contentColor = BentoEmerald,
+                                    icon = Icons.Default.CloudDone
+                                )
+                            }
+                            Text(
+                                text = "Dedicated screen for student performance trends over time pulling data from Firestore",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = { onOpenAnalyticsDashboard?.invoke() },
+                        colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.testTag("open_compose_charts_dashboard_btn")
+                    ) {
+                        Text("Open", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         // High-Level KPIs Row
         item {
             Row(

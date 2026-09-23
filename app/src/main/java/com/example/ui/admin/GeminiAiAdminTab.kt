@@ -345,7 +345,7 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                             }
                             Column {
                                 Text(
-                                    text = "Firebase App Check Enforcement",
+                                    text = "Application Integrity & Attestation",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -447,10 +447,10 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Icon(Icons.Default.Lock, contentDescription = null, tint = BentoEmerald, modifier = Modifier.size(14.dp))
-                                Text("Protected Services: Cloud Firestore, Firebase Auth, Realtime DB", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                                Text("Protected Services: Cloud Datastore, Authentication Gateway, Realtime Services", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                             }
                             Text(
-                                text = "App Check ensures incoming Firebase traffic originates from an authentic app binary. Unattested bot and malicious requests are automatically blocked at the cloud gate.",
+                                text = "Device attestation ensures incoming requests originate from a genuine, tamper-free app binary. Unattested bot traffic and unauthorized requests are automatically rejected.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -860,7 +860,7 @@ fun ApiConfigurationScreen(viewModel: QuizViewModel) {
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No API keys configured. Please add keys above or sync from Firebase Cloud.",
+                                text = "No API keys configured. Please add keys above or sync from Cloud Storage.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

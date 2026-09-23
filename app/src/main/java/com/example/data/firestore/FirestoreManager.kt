@@ -109,7 +109,7 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
 
             firestore = FirebaseFirestore.getInstance()
             _isCloudConnected.value = true
-            _cloudSyncMessage.value = "Cloud Firestore: Active & Synced"
+            _cloudSyncMessage.value = "Cloud Sync: Connected"
             Log.d(TAG, "Firebase Firestore initialized successfully.")
             // Security safeguard: purge any legacy API keys and mock seeded documents from cloud
             purgeCloudApiKeysIfPresent(firestore!!)
@@ -117,7 +117,7 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
         } catch (e: Throwable) {
             Log.w(TAG, "Firebase Firestore fallback mode: ${e.message}")
             _isCloudConnected.value = false
-            _cloudSyncMessage.value = "Cloud Firestore: Offline Cache Mode"
+            _cloudSyncMessage.value = "Local Storage Mode"
             _systemLogs.value = emptyList()
         }
     }
@@ -1018,12 +1018,13 @@ class FirestoreManager(private val context: Context, private val quizDao: QuizDa
                 )
             }
 
-            // 5. Rank strictly by total points earned across all quizzes descending,
-            // with ties broken by accuracy / average percentage and attempts count
+            // 5. Rank top-scoring students ordered strictly by their average performance (averagePercentage descending),
+            // with ties broken by total points and attempts count
             val sortedList = rawEntries
                 .sortedWith(
-                    compareByDescending<StudentLeaderboardEntry> { it.totalScore }
+                    compareByDescending<StudentLeaderboardEntry> { it.totalQuizzesTaken > 0 }
                         .thenByDescending { it.averagePercentage }
+                        .thenByDescending { it.totalScore }
                         .thenByDescending { it.totalQuizzesTaken }
                 )
                 .take(limit)

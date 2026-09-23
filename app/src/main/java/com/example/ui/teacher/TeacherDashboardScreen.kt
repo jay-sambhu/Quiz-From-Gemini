@@ -41,7 +41,10 @@ import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TeacherDashboardScreen(viewModel: QuizViewModel) {
+fun TeacherDashboardScreen(
+    viewModel: QuizViewModel,
+    onOpenAnalytics: (() -> Unit)? = null
+) {
     val currentUser by viewModel.currentUser.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
     val allQuizSets by viewModel.allQuizSets.collectAsState()
@@ -141,20 +144,19 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Import Quiz", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
+                    if (onOpenAnalytics != null) {
+                        IconButton(
+                            onClick = onOpenAnalytics,
+                            modifier = Modifier.testTag("teacher_topbar_analytics_btn")
+                        ) {
+                            Icon(Icons.Default.Insights, contentDescription = "Performance Analytics", tint = BentoPrimary)
+                        }
+                    }
                     IconButton(
                         onClick = { viewModel.syncWithFirestoreCloud() },
-                        enabled = !isSyncingFirestore,
                         modifier = Modifier.testTag("teacher_sync_cloud_btn")
                     ) {
-                        if (isSyncingFirestore) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = BentoPrimary
-                            )
-                        } else {
-                            Icon(Icons.Default.CloudSync, contentDescription = "Sync Cloud", tint = BentoPrimary)
-                        }
+                        Icon(Icons.Default.CloudSync, contentDescription = "Sync Cloud", tint = BentoPrimary)
                     }
                     UserProfileAvatar(
                         name = currentUser?.name ?: "Teacher",
@@ -611,7 +613,8 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                     viewModel = viewModel,
                     onSendAlertToStudent = {
                         selectedTab = 2
-                    }
+                    },
+                    onOpenAnalyticsDashboard = onOpenAnalytics
                 )
             }
                 else -> {
@@ -666,7 +669,7 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                 )
             },
             onDismiss = { showCreateDialog = false },
-            onGenerateAi = { topic, title, desc, catId, catName, count, duration, difficulty, tags ->
+            onGenerateAi = { topic, title, desc, catId, catName, count, duration, difficulty, tags, searchQuery ->
                 viewModel.generateGeminiAiQuiz(
                     topic = topic,
                     title = title,
@@ -676,7 +679,8 @@ fun TeacherDashboardScreen(viewModel: QuizViewModel) {
                     questionCount = count,
                     durationMinutes = duration,
                     difficulty = difficulty,
-                    tags = tags
+                    tags = tags,
+                    searchGroundingQuery = searchQuery
                 )
                 // Dialog stays open displaying AiQuestionGenerationProgress shimmer animation
                 // and closes automatically once finished or when dismissed to background
@@ -745,7 +749,7 @@ fun CreateQuizModalDialog(
     onRequestAiQuestionSuggestion: ((topic: String, diff: String, (com.example.data.gemini.GeneratedQuizQuestion) -> Unit) -> Unit)? = null,
     onRequestAiDistractorsSuggestion: ((qText: String, topic: String, diff: String, (com.example.data.gemini.GeneratedQuizQuestion) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit,
-    onGenerateAi: (topic: String, title: String, desc: String, catId: String, catName: String, count: Int, duration: Int, difficulty: String, tags: String) -> Unit,
+    onGenerateAi: (topic: String, title: String, desc: String, catId: String, catName: String, count: Int, duration: Int, difficulty: String, tags: String, searchGroundingQuery: String) -> Unit,
     onCreateManual: (title: String, desc: String, catId: String, catName: String, duration: Int, passMark: Int, diff: String, questions: List<QuestionEntity>, tags: String) -> Unit,
     onOpenImportCsv: (() -> Unit)? = null
 ) {
@@ -756,6 +760,8 @@ fun CreateQuizModalDialog(
     var titleInput by remember { mutableStateOf("") }
     var descInput by remember { mutableStateOf("") }
     var tagsInput by remember { mutableStateOf("") }
+    var searchGroundingQuery by remember { mutableStateOf("") }
+    var isSearchGroundingEnabled by remember { mutableStateOf(false) }
     var selectedCat by remember { mutableStateOf(categories.firstOrNull()) }
     var questionCount by remember { mutableIntStateOf(5) }
     var durationMinutes by remember { mutableIntStateOf(10) }
@@ -817,8 +823,99 @@ fun CreateQuizModalDialog(
                             value = topicInput,
                             onValueChange = { topicInput = it },
                             label = { Text("Subject / Topic (e.g., Quantum Physics, Algorithms)") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("ai_quiz_topic_input")
                         )
+
+                        // Google Search Grounding Search Bar Card
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("google_search_grounding_card"),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSearchGroundingEnabled) BentoViolet.copy(alpha = 0.08f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.TravelExplore,
+                                            contentDescription = "Search Grounding",
+                                            tint = if (isSearchGroundingEnabled) BentoViolet else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Column {
+                                            Text(
+                                                "Google Search Grounding",
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 13.sp,
+                                                color = if (isSearchGroundingEnabled) BentoViolet else MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                "Verify up-to-date facts with real-time web search",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Switch(
+                                        checked = isSearchGroundingEnabled,
+                                        onCheckedChange = { isSearchGroundingEnabled = it },
+                                        modifier = Modifier.testTag("google_search_grounding_switch")
+                                    )
+                                }
+
+                                if (isSearchGroundingEnabled) {
+                                    OutlinedTextField(
+                                        value = searchGroundingQuery,
+                                        onValueChange = { searchGroundingQuery = it },
+                                        label = { Text("Search Bar / Grounding Query") },
+                                        placeholder = { Text("e.g. Latest discoveries James Webb Telescope 2026") },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.Search,
+                                                contentDescription = "Search Query",
+                                                tint = BentoViolet
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            if (searchGroundingQuery.isNotBlank()) {
+                                                IconButton(onClick = { searchGroundingQuery = "" }) {
+                                                    Icon(Icons.Default.Close, contentDescription = "Clear search", modifier = Modifier.size(16.dp))
+                                                }
+                                            }
+                                        },
+                                        singleLine = true,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("google_search_grounding_input"),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    Text(
+                                        text = "Gemini will invoke Google Search tools to anchor multiple-choice questions & explanations against up-to-date live web facts.",
+                                        fontSize = 11.sp,
+                                        color = BentoViolet,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
+                        }
 
                         OutlinedTextField(
                             value = titleInput,
@@ -1052,6 +1149,13 @@ fun CreateQuizModalDialog(
                         val cat = selectedCat ?: categories.firstOrNull() ?: return@Button
                         if (modeTab == 0) {
                             if (topicInput.isNotBlank()) {
+                                val query = if (isSearchGroundingEnabled && searchGroundingQuery.isNotBlank()) {
+                                    searchGroundingQuery.trim()
+                                } else if (isSearchGroundingEnabled) {
+                                    topicInput.trim()
+                                } else {
+                                    ""
+                                }
                                 onGenerateAi(
                                     topicInput.trim(),
                                     titleInput.trim(),
@@ -1061,7 +1165,8 @@ fun CreateQuizModalDialog(
                                     questionCount,
                                     durationMinutes,
                                     difficulty,
-                                    tagsInput.trim()
+                                    tagsInput.trim(),
+                                    query
                                 )
                             }
                         } else {

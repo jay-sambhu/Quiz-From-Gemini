@@ -48,8 +48,8 @@ enum class LeaderboardFilterRange(val label: String) {
 }
 
 enum class LeaderboardSortOrder(val label: String) {
+    AVERAGE_PERFORMANCE("Average Performance"),
     TOTAL_POINTS("Total Points"),
-    ACCURACY("Accuracy %"),
     QUIZZES_TAKEN("Quizzes Taken")
 }
 
@@ -71,7 +71,7 @@ fun LeaderboardScreen(
     // Local UI states for search, filters, sorting and detail modal
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(LeaderboardFilterRange.ALL) }
-    var selectedSortOrder by remember { mutableStateOf(LeaderboardSortOrder.TOTAL_POINTS) }
+    var selectedSortOrder by remember { mutableStateOf(LeaderboardSortOrder.AVERAGE_PERFORMANCE) }
     var selectedStudentForDetail by remember { mutableStateOf<StudentLeaderboardEntry?>(null) }
 
     // Fetch freshest data from Firestore on entry
@@ -79,7 +79,7 @@ fun LeaderboardScreen(
         viewModel.fetchLeaderboardFromFirestore()
     }
 
-    // Filter and sort the student roster
+    // Filter and sort the student roster (ordered by average performance by default)
     val filteredEntries = remember(effectiveLeaderboard, searchQuery, selectedFilter, selectedSortOrder) {
         var list = effectiveLeaderboard
 
@@ -91,19 +91,22 @@ fun LeaderboardScreen(
             }
         }
 
-        // Apply secondary sort order if requested (default is TOTAL_POINTS which matches Firestore ranking)
+        // Apply primary / secondary sort order
         list = when (selectedSortOrder) {
+            LeaderboardSortOrder.AVERAGE_PERFORMANCE -> list.sortedWith(
+                compareByDescending<StudentLeaderboardEntry> { it.totalQuizzesTaken > 0 }
+                    .thenByDescending { it.averagePercentage }
+                    .thenByDescending { it.totalScore }
+                    .thenByDescending { it.totalQuizzesTaken }
+            )
             LeaderboardSortOrder.TOTAL_POINTS -> list.sortedWith(
                 compareByDescending<StudentLeaderboardEntry> { it.totalScore }
                     .thenByDescending { it.averagePercentage }
                     .thenByDescending { it.totalQuizzesTaken }
             )
-            LeaderboardSortOrder.ACCURACY -> list.sortedWith(
-                compareByDescending<StudentLeaderboardEntry> { it.averagePercentage }
-                    .thenByDescending { it.totalScore }
-            )
             LeaderboardSortOrder.QUIZZES_TAKEN -> list.sortedWith(
                 compareByDescending<StudentLeaderboardEntry> { it.totalQuizzesTaken }
+                    .thenByDescending { it.averagePercentage }
                     .thenByDescending { it.totalScore }
             )
         }
@@ -117,16 +120,18 @@ fun LeaderboardScreen(
         }
     }
 
-    // Top 3 Podium (from unfiltered list sorted by total points)
-    val sortedByPoints = remember(effectiveLeaderboard) {
+    // Top 3 Podium (from unfiltered list sorted by average performance)
+    val sortedByPerformance = remember(effectiveLeaderboard) {
         effectiveLeaderboard.sortedWith(
-            compareByDescending<StudentLeaderboardEntry> { it.totalScore }
+            compareByDescending<StudentLeaderboardEntry> { it.totalQuizzesTaken > 0 }
                 .thenByDescending { it.averagePercentage }
+                .thenByDescending { it.totalScore }
+                .thenByDescending { it.totalQuizzesTaken }
         )
     }
-    val firstPlace = sortedByPoints.getOrNull(0)
-    val secondPlace = sortedByPoints.getOrNull(1)
-    val thirdPlace = sortedByPoints.getOrNull(2)
+    val firstPlace = sortedByPerformance.getOrNull(0)
+    val secondPlace = sortedByPerformance.getOrNull(1)
+    val thirdPlace = sortedByPerformance.getOrNull(2)
 
     // Current student's entry on the leaderboard
     val myStudentId = currentUser?.id
@@ -244,19 +249,22 @@ fun LeaderboardScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     BentoPillTag(
-                                        text = "Ranked by Total Points",
+                                        text = "Ranked by Average Performance",
                                         containerColor = BentoAmber,
                                         contentColor = Color.Black,
                                         icon = Icons.Default.EmojiEvents
                                     )
 
-                                    val totalPointsSum = effectiveLeaderboard.sumOf { it.totalScore }
+                                    val activeStudents = effectiveLeaderboard.filter { it.totalQuizzesTaken > 0 }
+                                    val classAvgPerformance = if (activeStudents.isNotEmpty()) {
+                                        activeStudents.map { it.averagePercentage.toDouble() }.average()
+                                    } else 0.0
                                     Surface(
                                         color = Color.Black.copy(alpha = 0.6f),
                                         shape = RoundedCornerShape(12.dp)
                                     ) {
                                         Text(
-                                            text = "$totalPointsSum Total Pts",
+                                            text = "${String.format(Locale.getDefault(), "%.1f", classAvgPerformance)}% Class Avg",
                                             color = BentoAmber,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,
@@ -267,13 +275,13 @@ fun LeaderboardScreen(
 
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Top Performing Students",
+                                    text = "Top-Scoring Students",
                                     color = Color.White,
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Real-time points accumulated across all completed quiz attempts in Cloud Firestore.",
+                                    text = "Ordered by average performance and accuracy across all completed quiz attempts from Firebase Firestore.",
                                     color = Color.White.copy(alpha = 0.85f),
                                     style = MaterialTheme.typography.bodySmall,
                                     maxLines = 2,
@@ -390,8 +398,8 @@ fun LeaderboardScreen(
                 item {
                     val myRank = myEntry.rank
                     val totalClassSize = effectiveLeaderboard.size
-                    val aheadOfMe = if (myRank > 1) sortedByPoints.getOrNull(myRank - 2) else null
-                    val pointsDiffToNext = if (aheadOfMe != null) (aheadOfMe.totalScore - myEntry.totalScore) else 0
+                    val aheadOfMe = if (myRank > 1) sortedByPerformance.getOrNull(myRank - 2) else null
+                    val pctDiffToNext = if (aheadOfMe != null) (aheadOfMe.averagePercentage - myEntry.averagePercentage) else 0f
 
                     BentoCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -436,7 +444,7 @@ fun LeaderboardScreen(
                                             )
                                         }
                                         Text(
-                                            text = "Rank #$myRank of $totalClassSize students",
+                                            text = "Rank #$myRank of $totalClassSize students • ${myEntry.totalScore} pts",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -452,13 +460,13 @@ fun LeaderboardScreen(
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
                                         Text(
-                                            text = "${myEntry.totalScore}",
+                                            text = "${String.format(Locale.getDefault(), "%.1f", myEntry.averagePercentage)}%",
                                             color = Color.White,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 18.sp
                                         )
                                         Text(
-                                            text = "POINTS",
+                                            text = "AVG SCORE",
                                             color = Color.White.copy(alpha = 0.8f),
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 9.sp
@@ -491,11 +499,11 @@ fun LeaderboardScreen(
                                     )
                                     Text(
                                         text = if (myRank == 1) {
-                                            "Leading 1st Place! Keep it up!"
+                                            "Leading 1st Place with ${String.format(Locale.getDefault(), "%.1f", myEntry.averagePercentage)}% average!"
                                         } else if (aheadOfMe != null) {
-                                            "${pointsDiffToNext + 1} pts behind #${myRank - 1} (${aheadOfMe.studentName})"
+                                            "${String.format(Locale.getDefault(), "%.1f", pctDiffToNext)}% behind #${myRank - 1} (${aheadOfMe.studentName})"
                                         } else {
-                                            "Take quizzes to climb ranks!"
+                                            "Take quizzes to climb the ranks!"
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Medium,
@@ -518,7 +526,7 @@ fun LeaderboardScreen(
             }
 
             // Top 3 Podium Showcase
-            if (sortedByPoints.isNotEmpty()) {
+            if (sortedByPerformance.isNotEmpty()) {
                 item {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Row(
@@ -528,7 +536,7 @@ fun LeaderboardScreen(
                         ) {
                             BentoSectionTitle(
                                 title = "Classroom Podium",
-                                subtitle = "Top 3 highest point earners"
+                                subtitle = "Top 3 highest performing students"
                             )
                         }
 
@@ -590,7 +598,7 @@ fun LeaderboardScreen(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     BentoSectionTitle(
                         title = "Student Standings",
-                        subtitle = "Cumulative points across all quiz attempts"
+                        subtitle = "Ordered by average performance across quiz attempts"
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -619,16 +627,52 @@ fun LeaderboardScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    // Sort Order Selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Sort:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        LeaderboardSortOrder.values().forEach { sort ->
+                            FilterChip(
+                                selected = selectedSortOrder == sort,
+                                onClick = { selectedSortOrder = sort },
+                                label = { Text(sort.label, fontSize = 11.sp, fontWeight = if (selectedSortOrder == sort) FontWeight.Bold else FontWeight.Normal) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = BentoAmber,
+                                    selectedLabelColor = Color.Black
+                                ),
+                                modifier = Modifier.testTag("sort_chip_${sort.name}")
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
                     // Range Filter Chips
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Text(
+                            text = "Filter:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         LeaderboardFilterRange.values().forEach { filter ->
                             FilterChip(
                                 selected = selectedFilter == filter,
                                 onClick = { selectedFilter = filter },
-                                label = { Text(filter.label, fontSize = 12.sp) },
+                                label = { Text(filter.label, fontSize = 11.sp) },
                                 shape = RoundedCornerShape(12.dp),
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = BentoViolet,
@@ -765,7 +809,7 @@ fun BentoPodiumCard(
                 modifier = Modifier.padding(top = 2.dp)
             ) {
                 Text(
-                    text = "${entry.totalScore} pts",
+                    text = "${String.format(Locale.getDefault(), "%.1f", entry.averagePercentage)}% avg",
                     style = MaterialTheme.typography.labelMedium,
                     color = if (rank == 1) BentoAmber else BentoPrimary,
                     fontWeight = FontWeight.Bold,
@@ -774,7 +818,7 @@ fun BentoPodiumCard(
             }
 
             Text(
-                text = "${entry.totalQuizzesTaken} quizzes",
+                text = "${entry.totalScore} pts • ${entry.totalQuizzesTaken} quizzes",
                 style = MaterialTheme.typography.bodySmall,
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -792,13 +836,31 @@ fun InteractiveLeaderboardRow(
     isMe: Boolean,
     onClick: () -> Unit
 ) {
+    // Highlight top-3 ranks with distinctive luxury accents (Gold, Silver, Bronze)
+    val isTop3 = entry.rank in 1..3
+    val top3BgColor = when (entry.rank) {
+        1 -> BentoAmber.copy(alpha = 0.14f)
+        2 -> Color(0xFF94A3B8).copy(alpha = 0.15f)
+        3 -> Color(0xFFD97706).copy(alpha = 0.12f)
+        else -> MaterialTheme.colorScheme.surface
+    }
+    val top3BorderColor = when (entry.rank) {
+        1 -> BentoAmber.copy(alpha = 0.65f)
+        2 -> Color(0xFF94A3B8).copy(alpha = 0.55f)
+        3 -> Color(0xFFD97706).copy(alpha = 0.50f)
+        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    }
+
+    val cardBg = if (isMe) BentoViolet.copy(alpha = 0.15f) else top3BgColor
+    val cardBorder = if (isMe) BentoViolet.copy(alpha = 0.55f) else top3BorderColor
+
     BentoCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
             .testTag("leaderboard_row_${entry.studentId}"),
-        backgroundColor = if (isMe) BentoViolet.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
-        borderColor = if (isMe) BentoViolet.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+        backgroundColor = cardBg,
+        borderColor = cardBorder,
         cornerRadius = 16.dp
     ) {
         Row(
@@ -806,10 +868,10 @@ fun InteractiveLeaderboardRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Distinctive Rank Position Badge
+            // Distinctive Rank Position Badge with Trophy/Medal icon for top-3
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(
                         when (entry.rank) {
@@ -821,12 +883,28 @@ fun InteractiveLeaderboardRow(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "#${entry.rank}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = if (entry.rank == 1) Color.Black else if (entry.rank <= 3) Color.White else MaterialTheme.colorScheme.onSurface
-                )
+                if (entry.rank == 1) {
+                    Icon(
+                        imageVector = Icons.Default.EmojiEvents,
+                        contentDescription = "1st Place Gold Trophy",
+                        tint = Color.Black,
+                        modifier = Modifier.size(22.dp)
+                    )
+                } else if (entry.rank == 2 || entry.rank == 3) {
+                    Icon(
+                        imageVector = Icons.Default.MilitaryTech,
+                        contentDescription = "${entry.rank} Place Medal",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                } else {
+                    Text(
+                        text = "#${entry.rank}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
 
             // Student Avatar
@@ -836,7 +914,9 @@ fun InteractiveLeaderboardRow(
                     .clip(CircleShape)
                     .background(
                         when (entry.rank) {
-                            1 -> BentoAmber.copy(alpha = 0.2f)
+                            1 -> BentoAmber.copy(alpha = 0.25f)
+                            2 -> Color(0xFF94A3B8).copy(alpha = 0.25f)
+                            3 -> Color(0xFFD97706).copy(alpha = 0.25f)
                             else -> BentoViolet.copy(alpha = 0.15f)
                         }
                     ),
@@ -844,7 +924,12 @@ fun InteractiveLeaderboardRow(
             ) {
                 Text(
                     text = entry.studentName.take(1).uppercase(),
-                    color = if (entry.rank == 1) BentoAmber else BentoViolet,
+                    color = when (entry.rank) {
+                        1 -> BentoAmber
+                        2 -> Color(0xFF64748B)
+                        3 -> Color(0xFFD97706)
+                        else -> BentoViolet
+                    },
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
@@ -868,16 +953,43 @@ fun InteractiveLeaderboardRow(
                             contentColor = Color.White
                         )
                     }
+                    if (isTop3 && !isMe) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = when (entry.rank) {
+                                1 -> BentoAmber.copy(alpha = 0.25f)
+                                2 -> Color(0xFF94A3B8).copy(alpha = 0.3f)
+                                else -> Color(0xFFD97706).copy(alpha = 0.25f)
+                            }
+                        ) {
+                            Text(
+                                text = when (entry.rank) {
+                                    1 -> "GOLD"
+                                    2 -> "SILVER"
+                                    else -> "BRONZE"
+                                },
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 9.sp,
+                                color = when (entry.rank) {
+                                    1 -> BentoAmber
+                                    2 -> Color(0xFF475569)
+                                    else -> Color(0xFFD97706)
+                                },
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "${entry.totalQuizzesTaken} quizzes taken",
+                        text = "${entry.totalQuizzesTaken} quizzes",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -887,36 +999,68 @@ fun InteractiveLeaderboardRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "${String.format(Locale.getDefault(), "%.0f", entry.averagePercentage)}% accuracy",
+                        text = "${entry.totalScore} pts",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (entry.averagePercentage >= 80f) BentoSuccess else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (entry.averagePercentage >= 80f) FontWeight.SemiBold else FontWeight.Normal
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
 
-            // Prominent Total Points Pill
+            // Prominent Average Performance Pill
             Surface(
-                color = if (isMe) BentoViolet else BentoPrimary.copy(alpha = 0.1f),
+                color = when {
+                    isMe -> BentoViolet
+                    entry.rank == 1 -> BentoAmber.copy(alpha = 0.25f)
+                    entry.rank == 2 -> Color(0xFF94A3B8).copy(alpha = 0.25f)
+                    entry.rank == 3 -> Color(0xFFD97706).copy(alpha = 0.20f)
+                    entry.averagePercentage >= 80f -> BentoSuccess.copy(alpha = 0.15f)
+                    else -> BentoPrimary.copy(alpha = 0.1f)
+                },
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Star,
+                        imageVector = if (isTop3) Icons.Default.EmojiEvents else Icons.AutoMirrored.Filled.TrendingUp,
                         contentDescription = null,
-                        tint = if (isMe) Color.White else BentoAmber,
-                        modifier = Modifier.size(14.dp)
+                        tint = when {
+                            isMe -> Color.White
+                            entry.rank == 1 -> BentoAmber
+                            entry.rank == 2 -> Color(0xFF475569)
+                            entry.rank == 3 -> Color(0xFFD97706)
+                            entry.averagePercentage >= 80f -> BentoSuccess
+                            else -> BentoPrimary
+                        },
+                        modifier = Modifier.size(15.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${entry.totalScore} pts",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isMe) Color.White else BentoPrimary
-                    )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "${String.format(Locale.getDefault(), "%.1f", entry.averagePercentage)}%",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = when {
+                                isMe -> Color.White
+                                entry.rank == 1 -> BentoAmber
+                                entry.rank == 2 -> Color(0xFF334155)
+                                entry.rank == 3 -> Color(0xFFD97706)
+                                entry.averagePercentage >= 80f -> BentoSuccess
+                                else -> BentoPrimary
+                            }
+                        )
+                        Text(
+                            text = "avg score",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = when {
+                                isMe -> Color.White.copy(alpha = 0.8f)
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
                 }
             }
         }

@@ -49,19 +49,23 @@ fun TopStudentsLeaderboardComponent(
     val isCloudConnected by viewModel.isCloudConnected.collectAsState()
     val cloudSyncMessage by viewModel.cloudSyncMessage.collectAsState()
 
-    var sortCriterion by remember { mutableStateOf(LeaderboardSortCriterion.TOTAL_POINTS) }
+    var sortCriterion by remember { mutableStateOf(LeaderboardSortCriterion.ACCURACY_RATE) }
     val isSyncingFirestore by viewModel.isSyncingFirestore.collectAsState()
+    val isFetchingLeaderboard by viewModel.isFetchingLeaderboard.collectAsState()
+    val isSyncing = isSyncingFirestore || isFetchingLeaderboard
 
-    // Sort entries according to selected criterion (Total Points vs. Accuracy %)
+    // Sort entries according to selected criterion (Accuracy % vs. Total Points)
     val sortedEntries = remember(rawEntries, sortCriterion) {
         val list = when (sortCriterion) {
+            LeaderboardSortCriterion.ACCURACY_RATE -> rawEntries.sortedWith(
+                compareByDescending<StudentLeaderboardEntry> { it.totalQuizzesTaken > 0 }
+                    .thenByDescending { it.averagePercentage }
+                    .thenByDescending { it.totalScore }
+                    .thenByDescending { it.totalQuizzesTaken }
+            )
             LeaderboardSortCriterion.TOTAL_POINTS -> rawEntries.sortedWith(
                 compareByDescending<StudentLeaderboardEntry> { it.totalScore }
                     .thenByDescending { it.averagePercentage }
-            )
-            LeaderboardSortCriterion.ACCURACY_RATE -> rawEntries.sortedWith(
-                compareByDescending<StudentLeaderboardEntry> { it.averagePercentage }
-                    .thenByDescending { it.totalScore }
             )
         }
         val totalCount = list.size
@@ -137,22 +141,11 @@ fun TopStudentsLeaderboardComponent(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isCloudConnected) BentoEmerald else BentoAmber)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (isCloudConnected) "Cloud Firestore Live" else "Cached Data",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isCloudConnected) BentoEmerald else BentoAmber,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 11.sp
-                            )
-                        }
+                        Text(
+                            text = "All-Time Standings",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
@@ -162,27 +155,18 @@ fun TopStudentsLeaderboardComponent(
                         onClick = {
                             viewModel.syncWithFirestoreCloud()
                         },
-                        enabled = !isSyncingFirestore,
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                             .testTag("refresh_leaderboard_firestore_btn")
                     ) {
-                        if (isSyncingFirestore) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = BentoEmerald
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.CloudSync,
-                                contentDescription = "Sync from Firestore",
-                                tint = if (isCloudConnected) BentoEmerald else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                        Icon(
+                            Icons.Default.CloudSync,
+                            contentDescription = "Sync from Firestore",
+                            tint = if (isCloudConnected) BentoEmerald else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
 
                     if (isCompactPreview && onViewFullLeaderboard != null) {
@@ -206,45 +190,6 @@ fun TopStudentsLeaderboardComponent(
                             )
                         }
                     }
-                }
-            }
-
-            // 2. Sort Criterion Pills (Points vs Accuracy) - only in full mode or expandable
-            if (!isCompactPreview) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilterChip(
-                        selected = sortCriterion == LeaderboardSortCriterion.TOTAL_POINTS,
-                        onClick = { sortCriterion = LeaderboardSortCriterion.TOTAL_POINTS },
-                        label = { Text("Total Points", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Star,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = if (sortCriterion == LeaderboardSortCriterion.TOTAL_POINTS) BentoAmber else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
-                        shape = RoundedCornerShape(10.dp)
-                    )
-
-                    FilterChip(
-                        selected = sortCriterion == LeaderboardSortCriterion.ACCURACY_RATE,
-                        onClick = { sortCriterion = LeaderboardSortCriterion.ACCURACY_RATE },
-                        label = { Text("Accuracy Rate", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.AutoMirrored.Filled.TrendingUp,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = if (sortCriterion == LeaderboardSortCriterion.ACCURACY_RATE) BentoEmerald else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
-                        shape = RoundedCornerShape(10.dp)
-                    )
                 }
             }
 

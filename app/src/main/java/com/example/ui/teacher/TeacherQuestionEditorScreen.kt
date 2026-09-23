@@ -178,12 +178,13 @@ fun TeacherQuestionEditorScreen(
                             // Handled via callback inside QuestionFormEditor
                         }
                     },
-                    onRequestAiSuggestion = { topicHint, diff, draft, callback ->
+                    onRequestAiSuggestion = { topicHint, diff, draft, searchGroundingQuery, callback ->
                         viewModel.requestAiQuestionSuggestion(
                             topic = if (topicHint.isNotBlank()) topicHint else "${quizSet.title} (${quizSet.categoryName})",
                             promptHint = topicHint,
                             difficulty = diff,
                             currentDraft = draft,
+                            searchGroundingQuery = searchGroundingQuery,
                             onResult = callback
                         )
                     },
@@ -264,13 +265,14 @@ fun TeacherQuestionEditorScreen(
                     quizSet = quizSet,
                     isGenerating = isAiSuggesting,
                     onDismiss = { showAiPromptDialog = false },
-                    onGenerate = { topicPrompt, difficulty ->
+                    onGenerate = { topicPrompt, difficulty, searchGroundingQuery ->
                         showAiPromptDialog = false
                         viewModel.requestAiQuestionSuggestion(
                             topic = topicPrompt.ifBlank { "${quizSet.title} (${quizSet.categoryName})" },
                             promptHint = topicPrompt,
                             difficulty = difficulty,
-                            currentDraft = activeEditingQuestion
+                            currentDraft = activeEditingQuestion,
+                            searchGroundingQuery = searchGroundingQuery
                         ) { generated ->
                             // When generated from list view, open editor directly with generated question!
                             activeEditingQuestion = QuestionEntity(
@@ -747,7 +749,7 @@ private fun QuestionFormEditor(
     isSaving: Boolean = false,
     onOpenAiSuggestDialog: () -> Unit,
     onAutoDistractors: (String) -> Unit,
-    onRequestAiSuggestion: (String, String, QuestionEntity?, (com.example.data.gemini.GeneratedQuizQuestion) -> Unit) -> Unit,
+    onRequestAiSuggestion: (String, String, QuestionEntity?, String, (com.example.data.gemini.GeneratedQuizQuestion) -> Unit) -> Unit,
     onRequestDistractors: (String, (com.example.data.gemini.GeneratedQuizQuestion) -> Unit) -> Unit,
     onSave: (QuestionEntity) -> Unit,
     onCancel: () -> Unit,
@@ -1117,10 +1119,10 @@ private fun QuestionFormEditor(
             isGenerating = isAiSuggesting,
             currentDraftText = questionText,
             onDismiss = { showLocalAiDialog = false },
-            onGenerate = { promptHint, diff ->
+            onGenerate = { promptHint, diff, searchGroundingQuery ->
                 showLocalAiDialog = false
                 val draft = initialQuestion.copy(questionText = questionText)
-                onRequestAiSuggestion(promptHint, diff, draft) { generated ->
+                onRequestAiSuggestion(promptHint, diff, draft, searchGroundingQuery) { generated ->
                     questionText = generated.questionText
                     optionA = generated.optionA
                     optionB = generated.optionB
@@ -1144,12 +1146,14 @@ private fun AiQuestionPromptModalDialog(
     isGenerating: Boolean,
     currentDraftText: String = "",
     onDismiss: () -> Unit,
-    onGenerate: (topicPrompt: String, difficulty: String) -> Unit
+    onGenerate: (topicPrompt: String, difficulty: String, searchGroundingQuery: String) -> Unit
 ) {
     var promptInput by remember {
         mutableStateOf(currentDraftText.ifBlank { "${quizSet.title} - ${quizSet.categoryName}" })
     }
     var selectedDifficulty by remember { mutableStateOf(quizSet.difficulty) }
+    var searchGroundingQuery by remember { mutableStateOf("") }
+    var isSearchGroundingEnabled by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1186,6 +1190,95 @@ private fun AiQuestionPromptModalDialog(
                     shape = RoundedCornerShape(12.dp)
                 )
 
+                // Google Search Grounding Search Bar Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("modal_search_grounding_card"),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSearchGroundingEnabled) BentoViolet.copy(alpha = 0.08f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.TravelExplore,
+                                    contentDescription = "Search Grounding",
+                                    tint = if (isSearchGroundingEnabled) BentoViolet else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Column {
+                                    Text(
+                                        "Google Search Grounding",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp,
+                                        color = if (isSearchGroundingEnabled) BentoViolet else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "Ground facts with real-time Google search",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = isSearchGroundingEnabled,
+                                onCheckedChange = { isSearchGroundingEnabled = it },
+                                modifier = Modifier.testTag("modal_search_grounding_switch")
+                            )
+                        }
+
+                        if (isSearchGroundingEnabled) {
+                            OutlinedTextField(
+                                value = searchGroundingQuery,
+                                onValueChange = { searchGroundingQuery = it },
+                                label = { Text("Grounding Search Bar") },
+                                placeholder = { Text("e.g. Recent 2026 breakthroughs in quantum computing") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = "Search Bar",
+                                        tint = BentoViolet
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (searchGroundingQuery.isNotBlank()) {
+                                        IconButton(onClick = { searchGroundingQuery = "" }) {
+                                            Icon(Icons.Default.Close, contentDescription = "Clear search", modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("modal_search_grounding_input"),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            Text(
+                                text = "Gemini will utilize Google Search tools to verify accurate real-time data before formulating the question and explanations.",
+                                fontSize = 11.sp,
+                                color = BentoViolet,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                }
+
                 Text(
                     text = "Cognitive Difficulty:",
                     fontWeight = FontWeight.SemiBold,
@@ -1210,7 +1303,14 @@ private fun AiQuestionPromptModalDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onGenerate(promptInput.trim(), selectedDifficulty)
+                    val query = if (isSearchGroundingEnabled && searchGroundingQuery.isNotBlank()) {
+                        searchGroundingQuery.trim()
+                    } else if (isSearchGroundingEnabled) {
+                        promptInput.trim()
+                    } else {
+                        ""
+                    }
+                    onGenerate(promptInput.trim(), selectedDifficulty, query)
                 },
                 enabled = !isGenerating,
                 colors = ButtonDefaults.buttonColors(containerColor = BentoViolet),
